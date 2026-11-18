@@ -21,8 +21,8 @@ export function parseSigningSecret(secret: string): Buffer {
 }
 
 // v1,<base64 HMAC-SHA256 of "id.timestamp.body">. body must be the exact bytes sent: re-serializing the JSON on
-// the other side can reorder or re-space it and break the signature.
-export function signWebhook(secret: string | Buffer, webhookId: string, timestamp: number, body: string) {
+// the other side can reorder or re-space it and break the signature. A string timestamp is signed exactly as given.
+export function signWebhook(secret: string | Buffer, webhookId: string, timestamp: number | string, body: string) {
   const key = typeof secret === 'string' ? parseSigningSecret(secret) : secret;
   return `v1,${createHmac('sha256', key).update(`${webhookId}.${timestamp}.${body}`).digest('base64')}`;
 }
@@ -43,10 +43,12 @@ export function verifyWebhook(
   { toleranceSeconds = DEFAULT_TOLERANCE_SECONDS, now = Date.now() }: VerifyOptions = {},
 ): boolean {
   const id = headers['webhook-id'];
-  const timestamp = Number(headers['webhook-timestamp']);
+  const timestamp = headers['webhook-timestamp'];
   const signatures = headers['webhook-signature'];
-  if (!id || !signatures || !Number.isInteger(timestamp)) return false;
-  if (Math.abs(now / 1_000 - timestamp) > toleranceSeconds) return false;
+  // Plain digits only: Number() would also read " 1763467200", "1763467200.0" or "0x...", none of which the sender
+  // signed. The signature is checked over the header as received, never over a re-formatted number.
+  if (!id || !signatures || !timestamp || !/^\d+$/.test(timestamp)) return false;
+  if (Math.abs(now / 1_000 - Number(timestamp)) > toleranceSeconds) return false;
 
   const expected = Buffer.from(signWebhook(secret, id, timestamp, body));
   // Constant time, so response timing doesn't reveal how much of a forged signature was right.

@@ -10,6 +10,7 @@ import { notifications, outboxEvents, requests, users as usersTable } from '@app
 import { REDACT_CENSOR, REDACT_PATHS } from '@approvals/api/redact';
 import { initSentry } from '@approvals/api/sentry';
 import { backoffSeconds, drainOnce, MAX_ATTEMPTS } from '../src/drain.js';
+import { verifyWebhook } from '../src/signature.js';
 
 let database: Database;
 let users: Record<'alice' | 'bob' | 'carol' | 'agent', { sub: string; name: string }>;
@@ -145,6 +146,27 @@ describe('drainOnce', () => {
     const headers = fetch.mock.calls[0]![1]!.headers as Record<string, string>;
     expect(headers).toMatchObject({ 'webhook-id': event.id, 'webhook-timestamp': expect.stringMatching(/^\d+$/) });
     expect(headers).not.toHaveProperty('webhook-signature');
+  });
+
+  it('signs a retry with the time of the retry, under the same webhook-id', async () => {
+    const secret = randomBytes(32);
+    const first = Date.UTC(2026, 10, 18, 12);
+    const retry = first + 60 * 60 * 1_000;
+    const event = await emit('request.approved', { decision: 'approved' });
+    const failing = respond(503);
+    await drainOnce(database.db, { webhook: { ...webhook(failing), secret, now: () => first } });
+    await makeDue();
+    const succeeding = respond(204);
+    await drainOnce(database.db, { webhook: { ...webhook(succeeding), secret, now: () => retry } });
+
+    const [before, after] = [failing, succeeding].map((fetch) => fetch.mock.calls[0]![1]!.headers as Record<string, string>);
+    expect(before!['webhook-id']).toBe(event.id);
+    expect(after!['webhook-id']).toBe(event.id);
+    expect(before!['webhook-timestamp']).toBe(String(first / 1_000));
+    expect(after!['webhook-timestamp']).toBe(String(retry / 1_000));
+    expect(after!['webhook-signature']).not.toBe(before!['webhook-signature']);
+    // Each signature is valid for its own attempt's timestamp.
+    expect(verifyWebhook(secret, after!, String(succeeding.mock.calls[0]![1]!.body), { now: retry })).toBe(true);
   });
 
   it('retries a failed delivery later, with backoff, and rolls back its notifications meanwhile', async () => {

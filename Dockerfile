@@ -86,4 +86,6 @@ FROM nginxinc/nginx-unprivileged:1.30-alpine AS web
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=web-build /app/apps/web/dist /usr/share/nginx/html
 EXPOSE 8080
-HEALTHCHECK --interval=5s --timeout=3s --retries=10 CMD wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1
+# Healthy = serves the dashboard and reaches a ready API through the proxy (catches a stale upstream address too).
+HEALTHCHECK --interval=5s --timeout=3s --retries=10 \
+  CMD wget -q -O /dev/null http://127.0.0.1:8080/ && wget -q -O /dev/null http://127.0.0.1:8080/ready || exit 1

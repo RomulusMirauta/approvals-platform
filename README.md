@@ -38,7 +38,7 @@ No Node needed, only Docker:
 docker compose up --build
 ```
 
-Then open the dashboard at **http://localhost:8080** and sign in as `bob@example.com` (approver), `alice@example.com` (requester) or `carol@example.com` (admin), password `demo-password`. The API is also on http://localhost:3000 (docs at http://localhost:3000/docs).
+Then open the dashboard at **http://localhost:8080** and sign in as `bob@example.com` (approver), `alice@example.com` (requester) or `carol@example.com` (admin), password `demo-password`. The API is on the same origin, through nginx (docs at http://localhost:8080/docs); its own port is not published, because the API trusts the client address nginx forwards (`TRUST_PROXY`) and a direct client could forge it.
 
 [compose.yaml](compose.yaml) runs each part as its own service, built from one multi-stage [Dockerfile](Dockerfile): `db` (Postgres 17), `migrate` (applies the migrations and adds the demo data, then exits), `api` (Fastify), `worker` (the notification service) and `web` (the built dashboard on nginx, which proxies `/v1`, `/docs`, `/health` and `/ready` to the API, so the browser sees one origin). The API and the worker never call each other: the API writes events to the outbox table in the same transaction as each change, and the worker consumes them (see [Events and notifications](#events-and-notifications)). The secrets in compose.yaml are public, development-only defaults; set `JWT_SECRET` and `POSTGRES_PASSWORD` in the environment anywhere else. `docker compose down -v` stops everything and deletes the data; [docker/smoke.sh](docker/smoke.sh) walks one approval through the running stack, as the [Docker workflow](.github/workflows/docker.yml) does in CI.
 
@@ -100,7 +100,7 @@ With `NOTIFY_WEBHOOK_URL` set, the worker POSTs every event there as `{ id, type
 
 - **`WEBHOOK_SIGNING_SECRET`**: `whsec_` followed by at least 24 base64-encoded random bytes, shared with the receiver, e.g. `node -e "console.log('whsec_' + require('crypto').randomBytes(32).toString('base64'))"`. A malformed one stops the worker at startup. Without one, deliveries still go out unsigned and the worker logs a warning once.
 - **Verifying** on the receiver: use any Standard Webhooks library, or `verifyWebhook(secret, headers, rawBody)` from `@approvals/notifications`. Compute the HMAC over the raw body bytes (not re-serialized JSON), compare in constant time, refuse timestamps more than 5 minutes off, and drop repeats by `webhook-id`.
-- **Decision events** (`request.approved`, `request.rejected`) carry what the receiver needs to act without calling back: `requestId`, `source`, `externalRef`, `decision`, `comment` (null if none), `decidedBy` (the approver's user id; `actor` has their id and name) and `decidedAt` (ISO 8601, the request's decision time), besides `requesterId`, `title`, `type` and `priority`.
+- **Decision events** (`request.approved`, `request.rejected`) carry what the receiver needs to act without calling back: `requestId`, `source`, `externalRef`, `decision`, `comment` (absent if none; older events may carry `""` or `null` instead), `decidedBy` (the approver's user id; `actor` has their id and name) and `decidedAt` (ISO 8601, the request's decision time; `decidedBy` and `decidedAt` are missing on events written before they were added, so treat both as optional), besides `requesterId`, `title`, `type` and `priority`.
 
 Run the worker against the same Postgres as the API (PGlite runs inside a single process, so it can't be shared):
 

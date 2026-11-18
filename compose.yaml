@@ -2,7 +2,7 @@
 #
 #   db       Postgres
 #   migrate  one-shot: applies the Drizzle migrations, then adds the demo data if it isn't there yet
-#   api      Fastify REST API (/v1, /docs, /health, /ready)
+#   api      Fastify REST API (/v1, /docs, /health, /ready), reached only through web
 #   worker   notification service: drains the transactional outbox the API writes to
 #   web      the dashboard (nginx), proxying the API paths to api, so the browser sees one origin
 #
@@ -50,12 +50,13 @@ services:
       DATABASE_URL: *database-url
       # Dev-only default (public). At least 32 random characters in any real deployment.
       JWT_SECRET: ${JWT_SECRET:-dev-only-jwt-secret-for-docker-compose-not-for-production}
-      # nginx in the web service sets X-Forwarded-For.
-      TRUST_PROXY: 'true'
+      # Believe X-Forwarded-For only from peers on a private network, i.e. this project's network, where the only
+      # client of the API is nginx (web), which replaces the header with the address it saw. That is also why the
+      # API has no published port: Docker forwards a published port from the network's gateway, a private address
+      # too, so a client could reach the API directly with a forged header and dodge the login rate limit.
+      TRUST_PROXY: uniquelocal
       LOG_LEVEL: ${LOG_LEVEL:-info}
       SENTRY_DSN: ${SENTRY_DSN:-}
-    ports:
-      - '127.0.0.1:${API_PORT:-3000}:3000'
     depends_on:
       migrate:
         condition: service_completed_successfully

@@ -50,6 +50,22 @@ describe('verifyWebhook', () => {
     expect(verifyWebhook(secret, headers('v1,not-a-signature'), body, { now })).toBe(false);
   });
 
+  // Number() reads "1763467200.0", " 1763467200" or "0x..." as the same instant, so a signature over the number
+  // passed for a header the sender never sent. Only plain digits are a timestamp.
+  it.each([`${timestamp}.0`, ` ${timestamp}`, `${timestamp} `, `0x${timestamp.toString(16)}`, `+${timestamp}`, `${timestamp}e0`, ''])(
+    'rejects the timestamp header %j, even with a signature over its numeric value',
+    (ts) => {
+      expect(verifyWebhook(secret, headers(signWebhook(secret, id, timestamp, body), ts), body, { now })).toBe(false);
+    },
+  );
+
+  it('checks the signature over the timestamp header exactly as sent', () => {
+    const padded = `0${timestamp}`;
+    const overRaw = `v1,${createHmac('sha256', secretBytes).update(`${id}.${padded}.${body}`).digest('base64')}`;
+    expect(verifyWebhook(secret, headers(overRaw, padded), body, { now })).toBe(true);
+    expect(verifyWebhook(secret, headers(signWebhook(secret, id, timestamp, body), padded), body, { now })).toBe(false);
+  });
+
   it('rejects a timestamp more than five minutes away, so a captured delivery cannot be replayed later', () => {
     expect(verifyWebhook(secret, headers(), body, { now: now + 301_000 })).toBe(false);
     expect(verifyWebhook(secret, headers(), body, { now: now - 301_000 })).toBe(false);

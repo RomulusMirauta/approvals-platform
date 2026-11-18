@@ -57,10 +57,14 @@ async function openTestDatabase() {
 }
 
 // logger: e.g. loggerOptions(stream), for tests that read the log lines.
-export async function setup({ rateLimit = false, logger }: { rateLimit?: boolean; logger?: AppOptions['logger'] } = {}) {
+export async function setup({
+  rateLimit = false,
+  logger,
+  trustProxy,
+}: { rateLimit?: boolean; logger?: AppOptions['logger']; trustProxy?: AppOptions['trustProxy'] } = {}) {
   const database = await openTestDatabase();
   const users = await seed(database.db);
-  const app = await buildApp({ db: database.db, jwtSecret: 'test-secret', rateLimit, logger });
+  const app = await buildApp({ db: database.db, jwtSecret: 'test-secret', rateLimit, logger, trustProxy });
 
   const tokens = new Map<string, string>();
   async function login(email: string) {

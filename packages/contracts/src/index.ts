@@ -175,7 +175,8 @@ export const RequestEvent = z.object({
   // The decision fields are set on request.approved and request.rejected only. Optional, not required, so events
   // written before decidedBy and decidedAt existed still pass.
   decision: DecisionValue.optional(),
-  comment: z.string().nullable().optional().describe('The decision comment; null when the approver left none'),
+  // Absent when the approver left none. null is still accepted: main wrote it for a while (signed-webhooks, PR #9).
+  comment: z.string().nullable().optional().describe('The decision comment; absent when the approver left none'),
   decidedBy: id.optional().describe("The deciding user's id (the same as actor.id)"),
   decidedAt: timestamp.optional().describe("The request's decidedAt, from the database clock"),
   actor: UserRef.describe('Who caused the event'),

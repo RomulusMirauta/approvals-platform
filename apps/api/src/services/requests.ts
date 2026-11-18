@@ -272,7 +272,8 @@ export async function decideRequest(db: Db, viewer: TokenPayload, id: string, bo
     // no email), and the decision time the request itself records.
     await recordEvent(tx, `request.${body.decision}`, row.eventFields, viewer, httpRequestId, {
       decision: body.decision,
-      comment: body.comment || null,
+      // No comment, no key: the earlier contract had comment as an optional string, and its consumers reject null.
+      ...(body.comment && { comment: body.comment }),
       decidedBy: viewer.sub,
       decidedAt: iso(decided.decidedAt),
     });

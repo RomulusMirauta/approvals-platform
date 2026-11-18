@@ -157,6 +157,10 @@ export const outboxEvents = pgTable(
     lastError: text('last_error'),
     // Not before this time: a failed event waits here for its retry (exponential backoff).
     availableAt: timestamp('available_at', { withTimezone: true }).notNull().defaultNow(),
+    // The X-Request-Id of the API call that caused the event, so the worker's log lines and the webhook can be
+    // matched to it. A column, not part of the payload: the payload's requestId is the approval request's id, and
+    // the contract describes the event, not how it was transported. Null for events not caused by a request (seed).
+    httpRequestId: text('http_request_id'),
   },
   (table) => [
     // Partial: the worker only looks for unprocessed events, and processed ones would make the index grow forever.

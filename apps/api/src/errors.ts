@@ -3,6 +3,7 @@ import { STATUS_CODES } from 'node:http';
 import type { FastifyError, FastifyInstance } from 'fastify';
 import { hasZodFastifySchemaValidationErrors } from 'fastify-type-provider-zod';
 import { Problem } from '@approvals/contracts';
+import { reportError } from './sentry.js';
 
 export class HttpError extends Error {
   constructor(
@@ -79,9 +80,9 @@ const POSTGRES_ERRORS: Record<string, { status: number; detail: string }> = {
 };
 
 export function registerErrorHandlers(app: FastifyInstance) {
-  app.setErrorHandler((error: FastifyError, request, reply) => {
-    const send = (status: number, extra: Omit<Problem, 'type' | 'title' | 'status'> = {}) => {
-      const body: Problem = { type: 'about:blank', title: STATUS_CODES[status] ?? 'Error', status, ...extra };
+  app.setErrorHandler(async (error: FastifyError, request, reply) => {
+    const send = (status: number, extra: Omit<Problem, 'type' | 'title' | 'status' | 'requestId'> = {}) => {
+      const body: Problem = { type: 'about:blank', title: STATUS_CODES[status] ?? 'Error', status, ...extra, requestId: request.id };
       return reply.code(status).type('application/problem+json').send(body);
     };
     const unavailable = (detail: string) => {
@@ -111,13 +112,23 @@ export function registerErrorHandlers(app: FastifyInstance) {
     if (status >= 500) {
       // Log the real error, but never send internals (SQL, stack traces) to the client.
       request.log.error(error);
+      // request.user is set by authenticate (auth.ts), so it is null when the error came before that. Read without
+      // auth.ts's types: the notification worker compiles this file too, without @fastify/jwt.
+      const { user } = request as { user?: { sub: string } | null };
+      await reportError(error, { requestId: request.id, userId: user?.sub });
       return send(500, { detail: 'Something went wrong on our side' });
     }
     return send(status, { detail: error.message });
   });
 
   app.setNotFoundHandler((request, reply) => {
-    const body: Problem = { type: 'about:blank', title: 'Not Found', status: 404, detail: `No route for ${request.method} ${request.url}` };
+    const body: Problem = {
+      type: 'about:blank',
+      title: 'Not Found',
+      status: 404,
+      detail: `No route for ${request.method} ${request.url}`,
+      requestId: request.id,
+    };
     return reply.code(404).type('application/problem+json').send(body);
   });
 }

@@ -27,7 +27,8 @@ describe('auth', () => {
     const unknownEmail = await login({ email: 'nobody@example.com', password: 'nope' });
     expect(wrongPassword.statusCode).toBe(401);
     expect(wrongPassword.headers['content-type']).toContain('application/problem+json');
-    expect(unknownEmail.json()).toEqual(wrongPassword.json());
+    // Identical apart from the request id, which every response has its own of.
+    expect(unknownEmail.json()).toEqual({ ...wrongPassword.json(), requestId: expect.any(String) });
   });
 
   it('rejects an invalid body with a 400 problem listing the fields', async () => {

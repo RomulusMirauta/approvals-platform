@@ -56,7 +56,7 @@ export const requestRoutes: FastifyPluginAsyncZod<{ db: Db }> = async (app, { db
       },
     },
     async (request, reply) => {
-      const result = await createRequest(db, request.user, request.body);
+      const result = await createRequest(db, request.user, request.body, request.id);
       return reply.code(result.created ? 201 : 200).send(result);
     },
   );
@@ -87,7 +87,7 @@ export const requestRoutes: FastifyPluginAsyncZod<{ db: Db }> = async (app, { db
         response: { 200: RequestDetail, ...problems(400, 401, 403, 404, 409) },
       },
     },
-    async (request) => decideRequest(db, request.user, request.params.id, request.body),
+    async (request) => decideRequest(db, request.user, request.params.id, request.body, request.id),
   );
 
   app.post(
@@ -100,7 +100,7 @@ export const requestRoutes: FastifyPluginAsyncZod<{ db: Db }> = async (app, { db
         response: { 200: RequestDetail, ...problems(400, 401, 403, 404, 409) },
       },
     },
-    async (request) => cancelRequest(db, request.user, request.params.id),
+    async (request) => cancelRequest(db, request.user, request.params.id, request.id),
   );
 
   app.post(

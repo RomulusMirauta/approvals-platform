@@ -3,7 +3,7 @@
 // server, so the concurrency tests race over separate connections instead of PGlite's one-at-a-time transactions.
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
-import { buildApp } from '../src/app.js';
+import { buildApp, type AppOptions } from '../src/app.js';
 import { openDatabase } from '../src/db/client.js';
 import { DEMO_PASSWORD, seed } from '../src/db/seed.js';
 
@@ -56,10 +56,11 @@ async function openTestDatabase() {
   }
 }
 
-export async function setup({ rateLimit = false } = {}) {
+// logger: e.g. loggerOptions(stream), for tests that read the log lines.
+export async function setup({ rateLimit = false, logger }: { rateLimit?: boolean; logger?: AppOptions['logger'] } = {}) {
   const database = await openTestDatabase();
   const users = await seed(database.db);
-  const app = await buildApp({ db: database.db, jwtSecret: 'test-secret', rateLimit });
+  const app = await buildApp({ db: database.db, jwtSecret: 'test-secret', rateLimit, logger });
 
   const tokens = new Map<string, string>();
   async function login(email: string) {
@@ -72,9 +73,15 @@ export async function setup({ rateLimit = false } = {}) {
   }
 
   // Sends a request as one of the demo users, e.g. as('bob', 'GET', '/v1/requests').
-  async function as(user: 'alice' | 'bob' | 'carol' | 'erp-agent', method: 'GET' | 'POST', url: string, payload?: object) {
+  async function as(
+    user: 'alice' | 'bob' | 'carol' | 'erp-agent',
+    method: 'GET' | 'POST',
+    url: string,
+    payload?: object,
+    headers: Record<string, string> = {},
+  ) {
     const token = await login(`${user}@example.com`);
-    return app.inject({ method, url, payload, headers: { authorization: `Bearer ${token}` } });
+    return app.inject({ method, url, payload, headers: { ...headers, authorization: `Bearer ${token}` } });
   }
 
   async function close() {

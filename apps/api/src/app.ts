@@ -11,6 +11,8 @@ import { z } from 'zod';
 import type { Db } from './db/client.js';
 import { registerDocs } from './docs.js';
 import { problems, registerErrorHandlers, serviceUnavailable } from './errors.js';
+import { RequestLog } from './logging.js';
+import { requestIdFrom } from './request-id.js';
 import { authRoutes } from './routes/auth.js';
 import { internalRoutes } from './routes/internal.js';
 import { notificationRoutes } from './routes/notifications.js';
@@ -43,13 +45,26 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 export async function buildApp({ db, jwtSecret, logger = false, corsOrigin, rateLimit: limit = true, trustProxy = false, cronSecret }: AppOptions) {
-  const app = Fastify({ logger, trustProxy }).withTypeProvider<ZodTypeProvider>();
+  const app = Fastify({
+    logger,
+    trustProxy,
+    logController: new RequestLog(),
+    // Explicitly off (Fastify 5's default): with a header name set, Fastify would trust the value as it comes and skip
+    // genReqId. requestIdFrom reads X-Request-Id itself and checks it first.
+    requestIdHeader: false,
+    genReqId: (request) => requestIdFrom(request.headers),
+  }).withTypeProvider<ZodTypeProvider>();
 
   // The zod schemas from @approvals/contracts validate input, serialize output (dropping unknown fields)
   // and generate the OpenAPI document.
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
   registerErrorHandlers(app);
+  // Added before every other hook (rate limit, auth), so every response carries it, errors included: a client can
+  // quote it in a bug report, and a caller that sent its own id sees which one we used.
+  app.addHook('onRequest', async (request, reply) => {
+    reply.header('X-Request-Id', request.id);
+  });
 
   // Actions like POST /cancel have no body. Many clients still send Content-Type: application/json with
   // nothing after it, which Fastify rejects by default; treat that as "no body" instead.
@@ -61,8 +76,9 @@ export async function buildApp({ db, jwtSecret, logger = false, corsOrigin, rate
 
   // Default security headers, including a strict CSP. Only /docs relaxes it (see docs.ts).
   await app.register(helmet);
-  // Retry-After is not readable cross-origin unless exposed; the dashboard uses it to time its retries.
-  await app.register(cors, { origin: corsOrigin ?? process.env.CORS_ORIGIN ?? 'http://localhost:5173', exposedHeaders: ['Retry-After'] });
+  // Response headers are not readable cross-origin unless exposed: the dashboard times its retries with Retry-After,
+  // and X-Request-Id lets it (or a developer in the browser console) name the request that failed.
+  await app.register(cors, { origin: corsOrigin ?? process.env.CORS_ORIGIN ?? 'http://localhost:5173', exposedHeaders: ['Retry-After', 'X-Request-Id'] });
   if (limit) await app.register(rateLimit, { max: 300, timeWindow: '1 minute' });
   // Pinning the algorithm means a token can't pick a weaker one (or none) for itself.
   await app.register(jwt, { secret: jwtSecret, sign: { algorithm: 'HS256' }, verify: { algorithms: ['HS256'] } });

@@ -32,3 +32,7 @@ jobs:
       - run: npm run drain -w @approvals/notifications
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # Optional: without this secret it is empty and the worker reports nothing to Sentry.
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          # The Sentry environment of the worker's events (the API takes it from VERCEL_ENV).
+          NODE_ENV: production

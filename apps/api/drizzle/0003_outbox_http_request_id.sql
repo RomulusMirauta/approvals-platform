@@ -1,0 +1,1 @@
+ALTER TABLE "outbox_events" ADD COLUMN "http_request_id" text;

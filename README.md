@@ -121,6 +121,19 @@ Vercel hosts request handlers only, so the live demo runs the notification servi
 
 Preview deployments sit behind Vercel's login; CI gets in with the `VERCEL_AUTOMATION_BYPASS_SECRET` repository secret. Previews raise the login rate limit (`LOGIN_RATE_LIMIT_MAX`) because the suite signs in many times from one machine.
 
+## Resilience
+
+Neon suspends an idle database and the serverless functions start cold, so a briefly unreachable database or a dropped connection is normal here, not exceptional. What the app does about it:
+
+- **Bounded waits.** The connection pool ([client.ts](apps/api/src/db/client.ts)) holds at most 5 connections, gives up connecting after 3 s and on a query after 5 s, closes connections idle for 10 s and uses TCP keepalive. A stuck query ends in a 503 instead of running into Vercel's 10 s limit.
+- **503, not 500.** Connection errors and timeouts, SQLSTATE `08xxx`, `57P01`-`57P03` (server shutting down or starting), `53300` (too many connections), `40001`/`40P01` (serialization failure, deadlock) and `57014` (statement timeout) answer `503` problem+json with `Retry-After: 2`, and are logged as warnings ([errors.ts](apps/api/src/errors.ts)).
+- **One retry, only where it is safe** ([retry.ts](apps/api/src/db/retry.ts)): a transaction aborted by a serialization failure or a deadlock rolled back completely, so it runs once more; the first connection on a cold start is retried once, since nothing has been written yet. Other writes are never retried: a timeout doesn't say whether the write committed.
+- **Liveness vs readiness.** `GET /health` says the process is up and never touches the database, so a database outage doesn't get healthy instances restarted. `GET /ready` runs `select 1` with a 2 s timeout and answers 200 or 503, for a load balancer or an uptime check to stop sending traffic while the database is away.
+- **Graceful shutdown** waits for in-flight requests, then closes the pool; after 10 s it exits anyway.
+- **Dashboard.** Queries retry network errors and 5xx up to 3 times, waiting as long as `Retry-After` asks or backing off 1 s, 2 s, 4 s, and never retry a 4xx. Meanwhile a banner says "Service temporarily unavailable, retrying…". Mutations (approve, reject, create, comment) are not retried automatically: if the response is lost after the server committed, a retry could act twice, so the person decides.
+
+**Server-side statement timeout.** `statement_timeout` can't be sent when connecting: Neon's pooler rejects unknown startup parameters. To make the database itself cancel runaway queries, set it once on the app's role: `ALTER ROLE <role> SET statement_timeout = '5s';` (it applies to every session of that role, migrations included).
+
 ## Roadmap
 
 - [x] Monorepo, shared contract, database schema and migrations

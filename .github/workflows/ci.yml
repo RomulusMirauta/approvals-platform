@@ -29,6 +29,35 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  api-postgres:
+    name: API tests on a real Postgres server
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # PGlite runs one transaction at a time; here the concurrency tests race over real connections.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Each test file creates and drops its own database on this server; see apps/api/tests/helpers.ts.
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build:contracts && npm test -w @approvals/api
+
   e2e:
     name: End-to-end tests (Playwright)
     needs: check

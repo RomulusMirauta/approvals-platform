@@ -55,6 +55,8 @@ npm run screenshots                   # regenerates the screenshots above
 
 The end-to-end suite starts the real API on a fresh, seeded, in-memory Postgres (port 3100) and the dashboard's dev server (port 5174), so it never touches your local data. Tests use page objects and role- and label-based locators, create their own data through the API, and can run alone or in parallel.
 
+The API tests use in-memory PGlite, which runs one transaction at a time. To run them against a real Postgres server, where the concurrency tests race over separate connections, set `TEST_DATABASE_URL` (e.g. `postgres://postgres:postgres@localhost:5432/postgres`): each test file creates its own database there and drops it afterwards. CI does this in the `api-postgres` job.
+
 ## Deploy (Vercel + Neon)
 
 One Vercel project serves both parts from the same domain: the dashboard as static files, and the API as a serverless function ([api/index.js](api/index.js) → [apps/api/src/serverless/handler.ts](apps/api/src/serverless/handler.ts)) in Frankfurt, next to the Neon database. See [vercel.json](vercel.json).

@@ -12,7 +12,8 @@
   "workspaces": [
     "packages/contracts",
     "apps/api",
-    "apps/web"
+    "apps/web",
+    "e2e"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
@@ -21,7 +22,9 @@
     "test": "npm run build:contracts && npm run test --workspaces --if-present",
     "lint": "eslint .",
     "dev:api": "npm run dev -w @approvals/api",
-    "dev:web": "npm run dev -w @approvals/web"
+    "dev:web": "npm run dev -w @approvals/web",
+    "test:e2e": "npm run build:contracts && npm run e2e -w @approvals/e2e",
+    "screenshots": "npm run build:contracts && npm run screenshots -w @approvals/e2e"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

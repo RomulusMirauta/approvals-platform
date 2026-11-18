@@ -56,3 +56,12 @@ The `api-postgres` CI job (the API tests against a real Postgres 17 server) cras
 | Low | The dashboard showed a raw error while the API was briefly unavailable. | Queries retry network errors and 5xx with backoff (honouring `Retry-After`), never 4xx, under a "retrying" banner; mutations are not retried. |
 
 Not done: a server-side `statement_timeout`. Neon's pooled endpoint rejects it as a startup parameter, so it would have to be set on the database role (see README, Resilience).
+
+## 2026-11-18: security headers and accessibility checks
+
+The dashboard's static files had no security headers (only the API sent helmet's). [vercel.json](vercel.json) now sets a strict CSP and the related headers on them, and Playwright checks them against deployments. axe found no WCAG 2.1 A/AA violations on the sign-in page, the exception queue or an open request.
+
+| Severity | Finding | Fix |
+|---|---|---|
+| Low | With the new CSP (no `'unsafe-eval'`), every page load reported a CSP violation: zod checks whether it may compile its parsers with `new Function` when the first schema is built. zod catches the error, so nothing broke, but the noise would hide real violations. Found by the new test that fails on any violation, run against the built app served with vercel.json's headers. | `z.config({ jitless: true })` in `apps/web/src/zod-config.ts`, loaded before the shared contract builds its schemas. |
+| Low (best practice, not WCAG) | axe's best-practice rules: the signed-in dashboard had no level-one heading, which screen-reader users jump to first to find where they are. | The header's "Approvals" is an `h1` (same look). |

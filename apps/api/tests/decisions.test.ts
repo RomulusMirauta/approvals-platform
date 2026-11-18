@@ -1,4 +1,6 @@
+import { count, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { approvals } from '../src/db/schema.js';
 import { newRequest, setup } from './helpers.js';
 
 let t: Awaited<ReturnType<typeof setup>>;
@@ -15,6 +17,11 @@ async function raise(user: 'alice' | 'carol' = 'alice') {
 
 const decide = (user: 'alice' | 'bob' | 'carol', id: string, body: object) =>
   t.as(user, 'POST', `/v1/requests/${id}/decision`, body);
+
+async function approvalRows(requestId: string) {
+  const [row] = await t.db.select({ n: count() }).from(approvals).where(eq(approvals.requestId, requestId));
+  return row?.n;
+}
 
 describe('decisions', () => {
   it('approves a pending request and records who decided', async () => {
@@ -51,6 +58,22 @@ describe('decisions', () => {
       decide('carol', id, { decision: 'rejected', comment: 'No' }),
     ]);
     expect(results.map((r) => r.statusCode).sort()).toEqual([200, 409]);
+    expect(await approvalRows(id)).toBe(1);
+  });
+
+  // On real Postgres (the api-postgres CI job) these run on separate connections. Without the row lock in
+  // lockRequest, several would read 'pending' before any of them commits, and more than one would win.
+  it('lets exactly one of many simultaneous decisions win', async () => {
+    const id = await raise();
+    const results = await Promise.all(
+      Array.from({ length: 10 }, (_, i) =>
+        i % 2 ? decide('bob', id, { decision: 'approved' }) : decide('carol', id, { decision: 'rejected', comment: 'No' }),
+      ),
+    );
+    const codes = results.map((r) => r.statusCode);
+    expect(codes.filter((c) => c === 200)).toHaveLength(1);
+    expect(codes.filter((c) => c === 409)).toHaveLength(9);
+    expect(await approvalRows(id)).toBe(1);
   });
 
   it('forbids deciding on your own request (separation of duties)', async () => {

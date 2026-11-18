@@ -1,4 +1,6 @@
+import { and, count, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { requests } from '../src/db/schema.js';
 import { newRequest, setup } from './helpers.js';
 
 let t: Awaited<ReturnType<typeof setup>>;
@@ -71,6 +73,11 @@ describe('creating requests', () => {
     ]);
     expect([a.statusCode, b.statusCode].sort()).toEqual([200, 201]);
     expect(a.json().request.id).toBe(b.json().request.id);
+    const [pending] = await t.db
+      .select({ n: count() })
+      .from(requests)
+      .where(and(eq(requests.externalRef, 'INV-2002'), eq(requests.status, 'pending')));
+    expect(pending?.n).toBe(1);
   });
 
   it('allows the same item again once the first request is decided', async () => {

@@ -25,7 +25,7 @@ Also: `metadata` is limited to 10 KB, and the dashboard can call an API on anoth
 
 ### Known limitations (documented, not fixed)
 
-- **Concurrency tests run on PGlite**, which executes transactions one at a time. They prove the code paths, not real races. The code relies on `SELECT … FOR UPDATE` and the partial unique index, which are correct under Postgres's default READ COMMITTED isolation. A CI job against a real Postgres service would prove it.
+- ~~**Concurrency tests run on PGlite**, which executes transactions one at a time, so they proved the code paths, not real races.~~ Covered since: the `api-postgres` CI job runs the API tests against a Postgres 17 server (`TEST_DATABASE_URL`), where simultaneous requests race over separate connections. Ten parallel decisions on one request must produce exactly one winner and one `approvals` row, which would not hold without `SELECT … FOR UPDATE`.
 - **Agents sign in with an email and password** and get an 8-hour user token. A production setup would give machines their own credentials (API keys or OAuth client credentials) with short-lived tokens.
 - **The login limit is per IP**, not per account. A per-account backoff would also slow down distributed guessing.
 - **An idempotent retry with a different payload** returns the original request unchanged. Storing a hash of the payload and answering 422 on a mismatch, as payment APIs do, would make that explicit.

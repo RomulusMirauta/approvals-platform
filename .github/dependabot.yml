@@ -8,6 +8,11 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # @types/node must describe the oldest Node we support (engines: >=22.12), not the newest: types for a later
+      # major would let code call APIs that don't exist on Node 22. Raise it by hand with the minimum Node version.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     groups:
       npm-minor-and-patch:
         update-types: [minor, patch]

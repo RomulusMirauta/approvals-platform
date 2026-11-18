@@ -75,4 +75,34 @@ describe('login rate limit', () => {
       await limited.close();
     }
   });
+
+  // TRUST_PROXY names the proxy (as compose.yaml does). With "true", a client reaching the API directly picked its
+  // own IP with X-Forwarded-For, a new one per attempt, and was never limited.
+  describe('behind a trusted proxy', () => {
+    const proxy = '172.18.0.5';
+    const attempt = (app: Awaited<ReturnType<typeof setup>>['app'], remoteAddress: string, forwardedFor: string) =>
+      app.inject({ method: 'POST', url: '/v1/auth/login', payload: {}, remoteAddress, headers: { 'x-forwarded-for': forwardedFor } });
+
+    it('ignores X-Forwarded-For from anyone else, so a direct client cannot escape the limit', async () => {
+      const limited = await setup({ rateLimit: true, trustProxy: proxy });
+      try {
+        const codes: number[] = [];
+        for (let i = 0; i < 11; i++) codes.push((await attempt(limited.app, '203.0.113.7', `10.0.0.${i}`)).statusCode);
+        expect(codes[10]).toBe(429);
+      } finally {
+        await limited.close();
+      }
+    });
+
+    it('limits each client the proxy forwards on its own', async () => {
+      const limited = await setup({ rateLimit: true, trustProxy: proxy });
+      try {
+        for (let i = 0; i < 10; i++) await attempt(limited.app, proxy, '198.51.100.1');
+        expect((await attempt(limited.app, proxy, '198.51.100.1')).statusCode).toBe(429);
+        expect((await attempt(limited.app, proxy, '198.51.100.2')).statusCode).toBe(400);
+      } finally {
+        await limited.close();
+      }
+    });
+  });
 });

@@ -1,5 +1,7 @@
+import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { asc } from 'drizzle-orm';
+import { RequestEvent } from '@approvals/contracts';
 import { outboxEvents } from '../src/db/schema.js';
 import { recordEvent } from '../src/services/outbox.js';
 import { newRequest, setup } from './helpers.js';
@@ -70,13 +72,30 @@ describe('transactional outbox', () => {
       source: 'erp-procurement-mcp',
       externalRef: 'INV-9002',
       decision: 'approved',
-      // No comment is null, not an empty string.
-      comment: null,
       decidedBy: t.users.bob.sub,
       // The same instant the request records, from the database clock.
       decidedAt: decided.decidedAt,
     });
     expect(Date.parse(event.payload.decidedAt!)).not.toBeNaN();
+    // No comment, no key: a consumer built on the earlier contract (comment: optional string) would reject null.
+    expect(event.payload).not.toHaveProperty('comment');
+  });
+
+  it('still reads decision events already written with comment: null', () => {
+    const written = {
+      requestId: randomUUID(),
+      requesterId: randomUUID(),
+      title: 'New laptop',
+      type: 'purchase',
+      priority: 'normal',
+      source: 'manual',
+      externalRef: null,
+      decision: 'approved',
+      comment: null,
+      actor: { id: randomUUID(), name: 'Bob Ionescu' },
+    };
+    expect(RequestEvent.safeParse(written).success).toBe(true);
+    expect(RequestEvent.safeParse({ ...written, comment: undefined }).success).toBe(true);
   });
 
   it('records request.cancelled', async () => {

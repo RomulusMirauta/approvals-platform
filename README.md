@@ -183,6 +183,24 @@ One id follows an approval from the HTTP request through the notification worker
 3. Search the worker's logs (the notification job's runs in GitHub Actions) for the same `requestId`: when the event was delivered, or each failed attempt and the dead letter.
 4. In Sentry, search `requestId:<id>` for a 500 or a dead-lettered event; the webhook receiver got the same id in `X-Request-Id`.
 
+## How this was built
+
+Built in November 2026 as a deliberately AI-assisted project. The roles I'm aiming for ask for "AI-assisted from day one, balancing speed with engineering discipline"; this repo is what that looks like in practice.
+
+**My role and the AI's.** I decided the scope, the architecture, the data model, the trade-offs and what "done" means; Claude Code wrote most of the code under that direction. Every change went through a pull request with CI gates and a protected `main`, reviewed and approved by me. Where the AI's output was wrong, tests and reviews caught it, not trust.
+
+**Workflow**
+
+1. **Plan first.** Each feature started as a written plan with acceptance criteria and edge cases.
+2. **Small, test-first steps.** A failing test, then the code, then a refactor; strict TypeScript and zod at every boundary.
+3. **Parallel agents.** Independent features ran as separate Claude Code sub-agents, each in its own git worktree and branch.
+4. **Independent review.** A separate review agent, with no shared context, read each change. Every finding was reproduced with a test before it was fixed.
+5. **CI as the last gate.** Lint, typecheck, unit and API tests, API tests on a real Postgres server, Playwright end-to-end with accessibility scans, the same suite against every preview deploy, a Docker Compose smoke test, CodeQL and Dependabot. Nothing merges red.
+
+**What the QA background added:** the test strategy (unit, API against real Postgres semantics, end-to-end on every preview, a nightly production smoke) and the failure cases worth testing: races between approvers, agent retries, crashes mid-delivery, lost database connections, forged headers.
+
+**What the reviews and the pipeline caught.** [FINDINGS.md](FINDINGS.md) lists 33 findings, 4 of them high severity, each with its fix and a regression test. Two examples: the first production deploy failed on an ES module loaded with `require` (lesson: test the deployed artifact, not just the code); and the real-Postgres CI job found that an idle connection dropped by the server crashed the process, which the in-process tests could not reproduce.
+
 ## Roadmap
 
 - [x] Monorepo, shared contract, database schema and migrations

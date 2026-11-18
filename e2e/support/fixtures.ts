@@ -3,7 +3,7 @@ import { DashboardPage } from '../pages/DashboardPage.ts';
 import { LoginPage } from '../pages/LoginPage.ts';
 import { ApiClient } from './api-client.ts';
 import { uniqueId } from './data.ts';
-import { TOKEN_STORAGE_KEY, WEB_URL } from './env.ts';
+import { EXTRA_HEADERS, TOKEN_STORAGE_KEY, WEB_URL } from './env.ts';
 import { users, type UserKey } from './users.ts';
 
 interface TestFixtures {
@@ -49,7 +49,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
   dashboardAs: async ({ browser, api }, use) => {
     const contexts: Awaited<ReturnType<typeof browser.newContext>>[] = [];
     await use(async (user) => {
-      const context = await browser.newContext({ baseURL: WEB_URL });
+      const context = await browser.newContext({ baseURL: WEB_URL, extraHTTPHeaders: EXTRA_HEADERS });
       contexts.push(context);
       return openSignedIn(await context.newPage(), await api.tokenFor(user), user);
     });

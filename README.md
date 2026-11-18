@@ -111,6 +111,16 @@ One Vercel project serves both parts from the same domain: the dashboard as stat
 
 Vercel hosts request handlers only, so the live demo runs the notification service as a scheduled GitHub Actions job ([notifications.yml](.github/workflows/notifications.yml)): every 5 minutes it drains the outbox and exits (`npm run drain -w @approvals/notifications`). It needs a `DATABASE_URL` repository secret and the repository variable `WORKER_ENABLED=true`. On a VM or container platform it would run continuously with `npm run worker`.
 
+### Environments
+
+| | Database | Deployed by | Tested by |
+|---|---|---|---|
+| **Local** | PGlite (in-process) | `npm run dev:api` / `dev:web` | Vitest and Playwright on fresh in-memory data |
+| **Preview** (every pull request) | Neon branch `dev` (copy-on-write copy of production) | Vercel, automatically | [preview-e2e.yml](.github/workflows/preview-e2e.yml): the Playwright suite against the deployed preview |
+| **Production** | Neon branch `production` | Vercel, on merge to `main` | The checks above must pass before merging |
+
+Preview deployments sit behind Vercel's login; CI gets in with the `VERCEL_AUTOMATION_BYPASS_SECRET` repository secret. Previews raise the login rate limit (`LOGIN_RATE_LIMIT_MAX`) because the suite signs in many times from one machine.
+
 ## Roadmap
 
 - [x] Monorepo, shared contract, database schema and migrations

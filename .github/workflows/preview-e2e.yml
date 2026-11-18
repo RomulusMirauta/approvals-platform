@@ -1,24 +1,33 @@
 name: Preview E2E
 
-# Every pull request gets a Vercel preview deployment on the Neon `dev` database branch. When it is ready,
-# the Playwright suite runs against that deployed preview: the same build, runtime and database engine as
-# production, without touching production. Merging to main deploys to production.
+# Every pull request gets a Vercel preview deployment on the Neon `dev` database branch. When Vercel reports
+# it ready (a repository_dispatch event), the Playwright suite runs against that deployed preview: the same
+# build, runtime and database engine as production, without touching production. Merging deploys production.
+# GitHub only runs repository_dispatch workflows from the default branch, and the run belongs to main, so the
+# result is also posted as a commit status on the deployed commit, where branch protection can require it.
 on:
-  deployment_status:
+  repository_dispatch:
+    types: [vercel.deployment.success]
 
 permissions:
   contents: read
+  statuses: write
 
 jobs:
   e2e:
     name: End-to-end tests on the preview deployment
-    if: github.event.deployment_status.state == 'success' && github.event.deployment.environment == 'Preview'
+    if: github.event.client_payload.environment == 'preview'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      SHA: ${{ github.event.client_payload.git.sha }}
+      GH_TOKEN: ${{ github.token }}
     steps:
+      - name: Mark the commit as being tested
+        run: gh api "repos/${{ github.repository }}/statuses/$SHA" -f state=pending -f context="Preview E2E" -f description="Playwright on the preview deployment" -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.deployment.sha }}
+          ref: ${{ github.event.client_payload.git.sha }}
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -29,7 +38,7 @@ jobs:
       - run: npm run build:contracts
       - run: npm run e2e -w @approvals/e2e
         env:
-          E2E_BASE_URL: ${{ github.event.deployment_status.target_url }}
+          E2E_BASE_URL: ${{ github.event.client_payload.url }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
       - uses: actions/upload-artifact@v7
         if: failure()
@@ -37,3 +46,6 @@ jobs:
           name: preview-playwright-report
           path: e2e/playwright-report
           retention-days: 7
+      - name: Report the result on the commit
+        if: always()
+        run: gh api "repos/${{ github.repository }}/statuses/$SHA" -f state=${{ job.status == 'success' && 'success' || 'failure' }} -f context="Preview E2E" -f description="Playwright on the preview deployment" -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

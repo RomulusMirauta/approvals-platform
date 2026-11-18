@@ -29,6 +29,8 @@ Also: `metadata` is limited to 10 KB, and the dashboard can call an API on anoth
 - **Agents sign in with an email and password** and get an 8-hour user token. A production setup would give machines their own credentials (API keys or OAuth client credentials) with short-lived tokens.
 - **The login limit is per IP**, not per account. A per-account backoff would also slow down distributed guessing.
 - **An idempotent retry with a different payload** returns the original request unchanged. Storing a hash of the payload and answering 422 on a mismatch, as payment APIs do, would make that explicit.
+- **The notification worker's SKIP LOCKED is tested on PGlite too**, so two workers draining at once run one after the other. The test proves each event is delivered once; the skipping itself needs a real Postgres to observe.
+- **The worker calls the webhook inside the transaction that claimed the batch**, so a slow receiver holds row locks and a connection for up to its 5-second timeout per event. Fine at this volume; at scale, claim events with a lease (push `available_at` forward and commit) and deliver outside the transaction.
 
 ## 2026-11-18: first production deploy
 

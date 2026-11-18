@@ -5,12 +5,16 @@ import type { Db } from '../db/client.js';
 import { problems, unauthorized } from '../errors.js';
 import { getUser, verifyCredentials } from '../services/users.js';
 
+// Logins per client per minute. Production keeps 10; the preview environment raises it, because the
+// end-to-end suite signs in many times from one CI machine.
+const loginLimit = Number(process.env.LOGIN_RATE_LIMIT_MAX ?? 10);
+
 export const authRoutes: FastifyPluginAsyncZod<{ db: Db }> = async (app, { db }) => {
   app.post(
     '/auth/login',
     {
       // Much stricter than the global limit: slows down password guessing.
-      config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+      config: { rateLimit: { max: loginLimit, timeWindow: '1 minute' } },
       schema: {
         tags: ['auth'],
         summary: 'Exchange email and password for a JWT',

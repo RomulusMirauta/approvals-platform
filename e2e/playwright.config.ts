@@ -1,5 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
-import { API_URL, WEB_PORT, WEB_URL } from './support/env.ts';
+import { API_URL, EXTRA_HEADERS, REMOTE_URL, WEB_PORT, WEB_URL } from './support/env.ts';
 
 const isCI = !!process.env.CI;
 
@@ -16,6 +16,7 @@ export default defineConfig({
   expect: { timeout: 5_000 },
   use: {
     baseURL: WEB_URL,
+    extraHTTPHeaders: EXTRA_HEADERS,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
@@ -32,9 +33,9 @@ export default defineConfig({
     },
   ],
 
-  // Both servers start fresh for the run: the API on an in-memory database seeded with the demo data,
-  // and the dashboard's dev server with its /v1 proxy pointed at that API.
-  webServer: [
+  // Locally both servers start fresh for the run: the API on an in-memory database seeded with the demo data,
+  // and the dashboard's dev server with its /v1 proxy pointed at that API. Against a deployment, nothing starts.
+  webServer: REMOTE_URL ? [] : [
     {
       name: 'api',
       command: 'node --import tsx ./scripts/start-api.ts',

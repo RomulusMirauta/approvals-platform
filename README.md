@@ -1,5 +1,9 @@
 # Approvals Platform
 
+[![CI](https://github.com/RomulusMirauta/approvals-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/RomulusMirauta/approvals-platform/actions/workflows/ci.yml)
+
+**Live demo: [approvals-platform-eta.vercel.app](https://approvals-platform-eta.vercel.app)** · **API docs: [/docs](https://approvals-platform-eta.vercel.app/docs)** · sign in with a demo account (password `demo-password`): `bob@example.com` (approver), `alice@example.com` (requester), `carol@example.com` (admin). It's a shared demo, so others may have changed the data.
+
 Human-in-the-loop approvals for AI agents. An agent (for example the [ERP Procurement MCP server](https://github.com/RomulusMirauta/erp-procurement-mcp)) finds an invoice that fails three-way matching and submits it here. A person reviews it in the dashboard and approves or rejects it, and the decision is recorded with a full audit trail.
 
 ## Screenshots
@@ -68,7 +72,7 @@ One Vercel project serves both parts from the same domain: the dashboard as stat
 - [x] Dashboard: request list and filters, exception queue, approve/reject
 - [x] ERP Procurement MCP server sends approval requests to this API
 - [x] End-to-end tests with Playwright
-- [ ] Deploy (Vercel + Neon)
+- [x] Deploy (Vercel + Neon)
 - [ ] Notification service consuming decision events from a queue
 
 ## License

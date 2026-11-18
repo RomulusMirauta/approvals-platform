@@ -29,3 +29,11 @@ Also: `metadata` is limited to 10 KB, and the dashboard can call an API on anoth
 - **Agents sign in with an email and password** and get an 8-hour user token. A production setup would give machines their own credentials (API keys or OAuth client credentials) with short-lived tokens.
 - **The login limit is per IP**, not per account. A per-account backoff would also slow down distributed guessing.
 - **An idempotent retry with a different payload** returns the original request unchanged. Storing a hash of the payload and answering 422 on a mismatch, as payment APIs do, would make that explicit.
+
+## 2026-11-18: first production deploy
+
+| Severity | Finding | Fix |
+|---|---|---|
+| High | Every API request on Vercel failed with `FUNCTION_INVOCATION_FAILED`. The logs showed `ERR_REQUIRE_ESM`: `@fastify/swagger-ui` → `@fastify/static` `require()`s the ESM-only `content-disposition` 3. Node 26 allows that locally, so tests and local runs passed; Vercel's function loader does not. | Removed `@fastify/swagger-ui`. `/docs` is a small page that loads Swagger UI from a CDN, with a CSP relaxed only on that route. Verified on the live deployment. |
+
+Lesson: test the deployed artifact, not just the code. The serverless handler had been tested behind a local Node server, which used the local module loader.

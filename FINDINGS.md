@@ -65,3 +65,14 @@ The dashboard's static files had no security headers (only the API sent helmet's
 |---|---|---|
 | Low | With the new CSP (no `'unsafe-eval'`), every page load reported a CSP violation: zod checks whether it may compile its parsers with `new Function` when the first schema is built. zod catches the error, so nothing broke, but the noise would hide real violations. Found by the new test that fails on any violation, run against the built app served with vercel.json's headers. | `z.config({ jitless: true })` in `apps/web/src/zod-config.ts`, loaded before the shared contract builds its schemas. |
 | Low (best practice, not WCAG) | axe's best-practice rules: the signed-in dashboard had no level-one heading, which screen-reader users jump to first to find where they are. | The header's "Approvals" is an `h1` (same look). |
+
+## 2026-11-18: observability
+
+Adding request ids, structured logs and Sentry turned up these, mostly in how the defaults behave.
+
+| Severity | Finding | Fix |
+|---|---|---|
+| Medium | Sentry SDK v11 removed `sendDefaultPii`, and its replacement, `dataCollection`, collects by default: request headers and cookies, request bodies (the login body holds a password), query strings, SQL parameters and local variables. Copying the usual `sendDefaultPii: false` would not compile, and leaving it out would have sent all of that. | `dataCollection` turns each of them off; the user id is added explicitly. A test checks the settings. |
+| Medium | SDK v11 enables its Fastify integration by default, and it captures errors itself before our error handler runs. With it left on, each 500 reached Sentry without the request id or the user (confirmed in a test): the integration's event went first, and Sentry's deduplication dropped ours, which had them. `setupFastifyErrorHandler`, the documented way to wire Fastify, is a deprecated no-op in v11. | The integration is configured to capture nothing; the error handler reports what it answers with 500, tagged. Tests check the tags, and that 401, 404, 409 and 503 are not reported. |
+| Low | Fastify's `requestIdHeader` takes the header's value as it comes: a client could put newlines or a megabyte of text in every log line of its request. | The id is accepted only if it is 1-128 characters of letters, digits and `-_.:`, otherwise replaced by a UUID. |
+| Low | The default request logging wrote two lines per request with the full URL, including the query string (search text typed by users). | One line per request with the route pattern instead of the URL. |

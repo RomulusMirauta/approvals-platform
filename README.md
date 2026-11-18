@@ -110,6 +110,7 @@ One Vercel project serves both parts from the same domain: the dashboard as stat
    - `JWT_SECRET`: 32+ random characters, e.g. `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
 3. Deploy. The build applies the migrations and adds the demo data if it isn't there yet. Requests never run migrations.
 4. Optional: set `CRON_SECRET` (32+ random characters) and Vercel Cron resets the demo data every night at 03:00 UTC, so visitors always find a full queue.
+5. Optional: set `SENTRY_DSN` for production and preview to report errors to Sentry (see Observability).
 
 ### Notification worker in production
 
@@ -137,6 +138,23 @@ Neon suspends an idle database and the serverless functions start cold, so a bri
 - **Dashboard.** Queries retry network errors and 5xx up to 3 times, waiting as long as `Retry-After` asks or backing off 1 s, 2 s, 4 s, and never retry a 4xx. Meanwhile a banner says "Service temporarily unavailable, retrying…". Mutations (approve, reject, create, comment) are not retried automatically: if the response is lost after the server committed, a retry could act twice, so the person decides.
 
 **Server-side statement timeout.** `statement_timeout` can't be sent when connecting: Neon's pooler rejects unknown startup parameters. To make the database itself cancel runaway queries, set it once on the app's role: `ALTER ROLE <role> SET statement_timeout = '5s';` (it applies to every session of that role, migrations included).
+
+## Observability
+
+One id follows an approval from the HTTP request through the notification worker to the webhook.
+
+- **Request ids.** Every API response has an `X-Request-Id` header (exposed to the dashboard through CORS), and every problem+json body repeats it as `requestId`. A caller can send its own `X-Request-Id`, e.g. the ERP agent's run id, and it is kept if it is sane (1-128 letters, digits, `-`, `_`, `.`, `:`); anything else is replaced by a fresh UUID, so a header can't forge log lines ([request-id.ts](apps/api/src/request-id.ts)).
+- **Into the outbox.** The request that creates, decides or cancels an approval stores its id with the outbox event (column `http_request_id`; the payload's `requestId` is the approval's id). The worker logs it as `requestId` on every delivery, failure and dead letter, and sends it to the webhook as `X-Request-Id`.
+- **Logs** are JSON lines (pino) at `LOG_LEVEL` (default `info`). The API writes one line per request: `method`, `route` (the pattern, e.g. `/v1/requests/:id`, not the URL), `status`, `durationMs`, `requestId`, `userId` (never the email) and, on Vercel, `vercelId` (Vercel's own `x-vercel-id`). Authorization headers, cookies, passwords, tokens and database URLs are redacted in the API's and the worker's logs ([logging.ts](apps/api/src/logging.ts), [redact.ts](apps/api/src/redact.ts)).
+- **Sentry** starts only when `SENTRY_DSN` is set (Vercel production and preview; the worker job reads the `SENTRY_DSN` repository secret). Environment from `VERCEL_ENV` (or `NODE_ENV`), release from the commit, 10% of traces in production and all in preview. The API reports only what it answers with 500, an unexpected error, never a 4xx or a 503 for a database that is briefly away; each event carries the `requestId` tag and the user's id, and nothing personal is collected automatically (no IPs, cookies, headers, bodies or local variables). The event is flushed before the 500 is sent, because a serverless instance can be frozen as soon as it answers. The worker reports dead-lettered events and failed drains, tagged `service: notifications` ([sentry.ts](apps/api/src/sentry.ts)).
+- **Checking the wiring after a deploy:** `curl -i -H "Authorization: Bearer $CRON_SECRET" https://<deployment>/internal/sentry-check` answers 500 on purpose; the error should appear in Sentry within a minute, tagged with the response's `X-Request-Id`.
+
+**Following one approval's journey.** Start from whatever you have:
+
+1. A problem+json body or a response header gives the `requestId`. Otherwise start from the approval's id: its outbox events record the id of each call that changed it: `select type, http_request_id, attempts, last_error, processed_at from outbox_events where payload->>'requestId' = '<approval id>' order by created_at;`
+2. Search the Vercel logs for that `requestId`: the API's line for the call (route, status, user, duration, `vercelId`).
+3. Search the worker's logs (the notification job's runs in GitHub Actions) for the same `requestId`: when the event was delivered, or each failed attempt and the dead letter.
+4. In Sentry, search `requestId:<id>` for a 500 or a dead-lettered event; the webhook receiver got the same id in `X-Request-Id`.
 
 ## Roadmap
 

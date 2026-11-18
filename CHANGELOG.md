@@ -7,6 +7,17 @@ All workspaces share one version.
 
 ## [Unreleased]
 
+### Added
+
+- Request ids: every API response has an `X-Request-Id` header (a caller's sane id is kept, otherwise a UUID) and every problem+json body a `requestId` (optional field in the `Problem` contract).
+- The request id is stored with each outbox event (migration `0003`); the notification worker logs it and sends it to the webhook as `X-Request-Id`.
+- Structured JSON logs: one line per API request (method, route, status, duration, request id, user id, Vercel id), `LOG_LEVEL`, and redaction of authorization headers, cookies, passwords, tokens and database URLs; the worker logs JSON too.
+- Sentry error reporting when `SENTRY_DSN` is set: unexpected 500s from the API (tagged with the request id and user id, flushed before the response), dead-lettered events and failed drains from the worker. `GET /internal/sentry-check` (behind `CRON_SECRET`) checks the wiring.
+
+### Changed
+
+- Dependabot no longer proposes major `@types/node` updates: the types follow the oldest supported Node (22).
+
 ## [0.2.0] - 2026-11-18
 
 ### Added

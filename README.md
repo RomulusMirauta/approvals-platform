@@ -1,6 +1,6 @@
 # Approvals Platform
 
-[![CI](https://github.com/RomulusMirauta/approvals-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/RomulusMirauta/approvals-platform/actions/workflows/ci.yml)
+[![CI](https://github.com/RomulusMirauta/approvals-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/RomulusMirauta/approvals-platform/actions/workflows/ci.yml) [![Production smoke](https://github.com/RomulusMirauta/approvals-platform/actions/workflows/production-smoke.yml/badge.svg)](https://github.com/RomulusMirauta/approvals-platform/actions/workflows/production-smoke.yml)
 
 **Live demo: [approvals-platform-eta.vercel.app](https://approvals-platform-eta.vercel.app)** · **API docs: [/docs](https://approvals-platform-eta.vercel.app/docs)** · sign in with a demo account (password `demo-password`): `bob@example.com` (approver), `alice@example.com` (requester), `carol@example.com` (admin). It's a shared demo, so others may have changed the data.
 
@@ -93,6 +93,10 @@ npm run screenshots                   # regenerates the screenshots above
 ```
 
 The end-to-end suite starts the real API on a fresh, seeded, in-memory Postgres (port 3100) and the dashboard's dev server (port 5174), so it never touches your local data. Tests use page objects and role- and label-based locators, create their own data through the API, and can run alone or in parallel.
+
+The suite also scans the sign-in page, the exception queue and an open request with [axe](https://github.com/dequelabs/axe-core-npm/tree/develop/packages/playwright) for WCAG 2.1 A/AA violations and fails on serious or critical ones. Against a deployment (`E2E_BASE_URL`), it checks the security headers that [vercel.json](vercel.json) sets on the dashboard (a strict CSP, `nosniff`, referrer, permissions and opener policies) and that signing in triggers no CSP violation; the Vite dev server doesn't send those headers, so locally these tests are skipped.
+
+`npm run smoke -w @approvals/e2e` runs only the `@smoke` tests ([smoke.spec.ts](e2e/tests/smoke.spec.ts)): the API is up, and an approver signs in and opens an invoice from the exception queue. They only read, and block any other write, because [production-smoke.yml](.github/workflows/production-smoke.yml) runs them against the live demo every night at 03:30 UTC, after the demo reset.
 
 The API tests use in-memory PGlite, which runs one transaction at a time. To run them against a real Postgres server, where the concurrency tests race over separate connections, set `TEST_DATABASE_URL` (e.g. `postgres://postgres:postgres@localhost:5432/postgres`): each test file creates its own database there and drops it afterwards. CI does this in the `api-postgres` job.
 

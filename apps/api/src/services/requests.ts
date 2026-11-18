@@ -132,6 +132,20 @@ export async function getRequest(db: Db, viewer: TokenPayload, id: string): Prom
 }
 
 export async function createRequest(db: Db, viewer: TokenPayload, body: CreateInput): Promise<CreateRequestResponse> {
+  // Only agent accounts speak for a source system. Otherwise anyone could file a fake "INV-1003" first and
+  // block the real agent's submission with a 409, or put a fake item in the approvers' exception queue.
+  if (viewer.role !== 'agent' && (body.source !== 'manual' || body.externalRef !== undefined)) {
+    throw forbidden('Only agent accounts can submit requests for a source system (source and externalRef)');
+  }
+  // One retry covers the rare case where the conflicting request was decided between our insert and our select.
+  return (await tryCreate(db, viewer, body)) ?? (await tryCreate(db, viewer, body)) ?? raceLost();
+}
+
+const raceLost = (): never => {
+  throw conflict('The request changed while it was being created; try again');
+};
+
+async function tryCreate(db: Db, viewer: TokenPayload, body: CreateInput): Promise<CreateRequestResponse | undefined> {
   return db.transaction(async (tx) => {
     // The partial unique index allows one pending request per (source, externalRef). Under a race the second
     // insert waits for the first transaction, then does nothing, so a retrying agent never gets a duplicate.
@@ -168,8 +182,9 @@ export async function createRequest(db: Db, viewer: TokenPayload, body: CreateIn
       .where(
         and(eq(requests.source, body.source), eq(requests.externalRef, body.externalRef ?? ''), eq(requests.status, 'pending')),
       );
+    if (!existing) return undefined;
     // Raised by someone this caller may not see: say it exists, but don't return it.
-    if (!existing || (!seesAllRequests(viewer) && existing.requesterId !== viewer.sub)) {
+    if (!seesAllRequests(viewer) && existing.requesterId !== viewer.sub) {
       throw conflict('A pending request for this source item already exists');
     }
     return { created: false, request: await getRequest(tx, viewer, existing.id) };
@@ -206,8 +221,8 @@ export async function decideRequest(db: Db, viewer: TokenPayload, id: string, bo
     if (row.requesterId === viewer.sub) throw forbidden('You cannot decide on a request you raised');
     if (row.status !== 'pending') throw conflict(`The request is already ${row.status}`);
 
-    const now = new Date();
-    await tx.update(requests).set({ status: body.decision, decidedAt: now, updatedAt: now }).where(eq(requests.id, id));
+    // The database clock, like created_at: an app server with a skewed clock can't record a decision before creation.
+    await tx.update(requests).set({ status: body.decision, decidedAt: sql`now()`, updatedAt: sql`now()` }).where(eq(requests.id, id));
     await tx.insert(approvals).values({ requestId: id, approverId: viewer.sub, decision: body.decision, comment: body.comment });
   });
   return getRequest(db, viewer, id);
@@ -221,8 +236,7 @@ export async function cancelRequest(db: Db, viewer: TokenPayload, id: string) {
     }
     if (row.status !== 'pending') throw conflict(`The request is already ${row.status}`);
 
-    const now = new Date();
-    await tx.update(requests).set({ status: 'cancelled', decidedAt: now, updatedAt: now }).where(eq(requests.id, id));
+    await tx.update(requests).set({ status: 'cancelled', decidedAt: sql`now()`, updatedAt: sql`now()` }).where(eq(requests.id, id));
   });
   return getRequest(db, viewer, id);
 }

@@ -68,7 +68,11 @@ export const CreateRequestBody = z.object({
     .describe('Id in the source system, for example INV-1003. One pending request per source and reference.'),
   amount: Money.optional(),
   tags: z.array(tagName).max(10).default([]),
-  metadata: z.record(z.string(), z.unknown()).default({}).describe('Free-form details from the source, for example exception codes'),
+  metadata: z
+    .record(z.string(), z.unknown())
+    .default({})
+    .refine((value) => JSON.stringify(value).length <= 10_000, 'Metadata is limited to 10 KB of JSON')
+    .describe('Free-form details from the source, for example exception codes'),
 });
 
 export const RequestSummary = z.object({

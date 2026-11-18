@@ -1,0 +1,1 @@
+ALTER TABLE "requests" ALTER COLUMN "amount_minor" SET DATA TYPE bigint;

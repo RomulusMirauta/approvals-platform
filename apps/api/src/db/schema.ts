@@ -5,9 +5,9 @@
 // Rules that must never break live in the database as constraints, not only in application code.
 import { relations, sql } from 'drizzle-orm';
 import {
+  bigint,
   check,
   index,
-  integer,
   jsonb,
   pgEnum,
   pgTable,
@@ -48,7 +48,8 @@ export const requests = pgTable(
     priority: priorityEnum('priority').notNull().default('normal'),
     source: text('source').notNull().default('manual'),
     externalRef: text('external_ref'),
-    amountMinor: integer('amount_minor'),
+    // bigint: 2^31 bani is only 21 million RON, a realistic invoice. mode 'number' is safe up to 2^53.
+    amountMinor: bigint('amount_minor', { mode: 'number' }),
     currency: text('currency'),
     metadata: jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
     // RESTRICT: a user who raised requests can't be deleted and leave them without a requester.

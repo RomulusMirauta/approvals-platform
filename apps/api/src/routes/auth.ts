@@ -31,7 +31,7 @@ export const authRoutes: FastifyPluginAsyncZod<{ db: Db }> = async (app, { db })
   app.get(
     '/me',
     {
-      onRequest: authenticate,
+      onRequest: authenticate(db),
       schema: { tags: ['auth'], summary: 'The signed-in user', response: { 200: User, ...problems(401) } },
     },
     async (request) => {

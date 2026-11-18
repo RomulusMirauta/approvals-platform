@@ -9,12 +9,18 @@ import { listTags } from '../services/tags.js';
 
 // Read-only views for the dashboard: tag filter options and the counters on the home page.
 export const reportRoutes: FastifyPluginAsyncZod<{ db: Db }> = async (app, { db }) => {
-  app.addHook('onRequest', authenticate);
+  app.addHook('onRequest', authenticate(db));
 
   app.get(
     '/tags',
-    { schema: { tags: ['reports'], summary: 'All tags with how many requests use each', response: { 200: z.array(Tag), ...problems(401) } } },
-    async () => listTags(db),
+    {
+      schema: {
+        tags: ['reports'],
+        summary: 'Tags with how many of your visible requests use each',
+        response: { 200: z.array(Tag), ...problems(401) },
+      },
+    },
+    async (request) => listTags(db, request.user),
   );
 
   app.get(

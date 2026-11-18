@@ -18,9 +18,15 @@ export const forbidden = (detail = 'Your role does not allow this action') => ne
 export const notFound = (detail = 'Request not found') => new HttpError(404, detail);
 export const conflict = (detail: string) => new HttpError(409, detail);
 
-// Documents the error responses of a route in OpenAPI, e.g. { ...problems(400, 404) }.
+// Documents the error responses of a route in OpenAPI, e.g. { ...problems(400, 404) }, with the content type
+// the error handler really sends. Every route can also answer 429 (rate limit) and 500, so those are always listed.
 export function problems(...codes: number[]) {
-  return Object.fromEntries(codes.map((code) => [code, Problem]));
+  return Object.fromEntries(
+    [...new Set([...codes, 429, 500])].map((code) => [
+      code,
+      { description: STATUS_CODES[code] ?? 'Error', content: { 'application/problem+json': { schema: Problem } } },
+    ]),
+  );
 }
 
 // Drizzle wraps driver errors, so the Postgres SQLSTATE code may sit on the cause.
@@ -36,6 +42,7 @@ const POSTGRES_ERRORS: Record<string, { status: number; detail: string }> = {
   '23505': { status: 409, detail: 'A record with these values already exists' },
   '23503': { status: 409, detail: 'The change conflicts with related records' },
   '23514': { status: 400, detail: 'The data breaks a database rule' },
+  '22003': { status: 400, detail: 'A number is out of range' },
 };
 
 export function registerErrorHandlers(app: FastifyInstance) {

@@ -21,16 +21,27 @@ export interface AppOptions {
   corsOrigin?: string;
   // Tests turn it off so many logins in a row don't hit the login limit.
   rateLimit?: boolean;
+  // Behind a proxy (Vercel, a load balancer) every request comes from the proxy's IP. Trusting it makes
+  // request.ip the real client, so the rate limits apply per client instead of to everyone at once.
+  trustProxy?: boolean;
 }
 
-export async function buildApp({ db, jwtSecret, logger = false, corsOrigin, rateLimit: limit = true }: AppOptions) {
-  const app = Fastify({ logger }).withTypeProvider<ZodTypeProvider>();
+export async function buildApp({ db, jwtSecret, logger = false, corsOrigin, rateLimit: limit = true, trustProxy = false }: AppOptions) {
+  const app = Fastify({ logger, trustProxy }).withTypeProvider<ZodTypeProvider>();
 
   // The zod schemas from @approvals/contracts validate input, serialize output (dropping unknown fields)
   // and generate the OpenAPI document.
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
   registerErrorHandlers(app);
+
+  // Actions like POST /cancel have no body. Many clients still send Content-Type: application/json with
+  // nothing after it, which Fastify rejects by default; treat that as "no body" instead.
+  const parseJson = app.getDefaultJsonParser('error', 'error');
+  app.removeContentTypeParser('application/json');
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (request, body, done) =>
+    body === '' ? done(null, undefined) : parseJson(request, body.toString(), done),
+  );
 
   // The CSP is relaxed only as far as Swagger UI at /docs needs (its inline styles and the validator badge).
   await app.register(helmet, {
@@ -40,7 +51,8 @@ export async function buildApp({ db, jwtSecret, logger = false, corsOrigin, rate
   });
   await app.register(cors, { origin: corsOrigin ?? process.env.CORS_ORIGIN ?? 'http://localhost:5173' });
   if (limit) await app.register(rateLimit, { max: 300, timeWindow: '1 minute' });
-  await app.register(jwt, { secret: jwtSecret });
+  // Pinning the algorithm means a token can't pick a weaker one (or none) for itself.
+  await app.register(jwt, { secret: jwtSecret, sign: { algorithm: 'HS256' }, verify: { algorithms: ['HS256'] } });
 
   await app.register(swagger, {
     openapi: {

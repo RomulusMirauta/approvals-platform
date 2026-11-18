@@ -10,9 +10,15 @@ afterAll(() => t.close());
 
 describe('tags and stats', () => {
   it('lists tags with how many requests use each', async () => {
-    const tags = (await t.as('alice', 'GET', '/v1/tags')).json();
+    const tags = (await t.as('bob', 'GET', '/v1/tags')).json();
     expect(tags.find((tag: any) => tag.name === 'finance').requestCount).toBe(6);
     expect(tags.find((tag: any) => tag.name === 'duplicate').requestCount).toBe(1);
+  });
+
+  it('counts only the requests the caller can see', async () => {
+    // The finance requests were all raised by the agent, so a requester sees the tag with nothing behind it.
+    const tags = (await t.as('alice', 'GET', '/v1/tags')).json();
+    expect(tags.find((tag: any) => tag.name === 'finance').requestCount).toBe(0);
   });
 
   it('counts requests for every status and type, zeros included', async () => {

@@ -26,7 +26,7 @@ const IdParams = z.object({ id: z.uuid() });
 
 export const requestRoutes: FastifyPluginAsyncZod<{ db: Db }> = async (app, { db }) => {
   // Every route in this plugin needs a valid token; the hook stays inside this plugin's scope.
-  app.addHook('onRequest', authenticate);
+  app.addHook('onRequest', authenticate(db));
 
   app.get(
     '/requests',

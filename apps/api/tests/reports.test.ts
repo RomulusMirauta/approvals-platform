@@ -12,7 +12,7 @@ describe('tags and stats', () => {
   it('lists tags with how many requests use each', async () => {
     const tags = (await t.as('bob', 'GET', '/v1/tags')).json();
     expect(tags.find((tag: any) => tag.name === 'finance').requestCount).toBe(6);
-    expect(tags.find((tag: any) => tag.name === 'duplicate').requestCount).toBe(1);
+    expect(tags.find((tag: any) => tag.name === 'duplicate-invoice').requestCount).toBe(1);
   });
 
   it('counts only the requests the caller can see', async () => {
@@ -26,7 +26,7 @@ describe('tags and stats', () => {
     expect(stats).toEqual({
       byStatus: { pending: 7, approved: 2, rejected: 2, cancelled: 1 },
       pendingByType: { invoice_exception: 4, purchase: 1, access: 1, other: 1 },
-      pendingHighPriority: 2,
+      pendingHighPriority: 1,
     });
     const agentStats = (await t.as('erp-agent', 'GET', '/v1/stats')).json();
     expect(agentStats.pendingByType).toEqual({ invoice_exception: 4, purchase: 0, access: 0, other: 0 });

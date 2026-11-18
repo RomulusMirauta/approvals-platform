@@ -33,7 +33,7 @@ test('exception queue', async ({ page, signInAs }) => {
 
 test('request detail', async ({ page, signInAs }) => {
   const dashboard = await signInAs('bob');
-  await dashboard.open('INV-1003: unit price 8% above PO');
+  await dashboard.open('INV-1003: PRICE_VARIANCE');
   await expect(dashboard.panel.entry('Asked purchasing')).toBeVisible();
   await expect(dashboard.statValue('Pending')).toHaveText(/^\d+$/);
   await capture(page, 'request-detail');

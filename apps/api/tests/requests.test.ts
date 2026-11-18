@@ -29,7 +29,7 @@ describe('listing requests', () => {
     expect(pending.total).toBe(7);
 
     const priceVariance = (await t.as('bob', 'GET', '/v1/requests?tag=price-variance')).json();
-    expect(priceVariance.items.map((r: any) => r.externalRef).sort()).toEqual(['INV-1003', 'INV-1008']);
+    expect(priceVariance.items.map((r: any) => r.externalRef).sort()).toEqual(['INV-1003']);
     expect(priceVariance.items[0].tags).toContain('finance');
 
     const byRef = (await t.as('bob', 'GET', '/v1/requests?q=inv-1005')).json();
@@ -99,9 +99,9 @@ describe('reading and commenting', () => {
   it('returns the detail with decisions, comments and user names', async () => {
     const list = (await t.as('bob', 'GET', '/v1/requests?q=INV-1005')).json();
     const detail = (await t.as('bob', 'GET', `/v1/requests/${list.items[0].id}`)).json();
-    expect(detail.metadata).toMatchObject({ supplier: 'Transilvania Logistics SRL' });
+    expect(detail.metadata).toMatchObject({ supplier: 'Somes Industrial Components SRL', exceptionCodes: ['QUANTITY_NOT_RECEIVED'] });
     expect(detail.decisions).toEqual([
-      expect.objectContaining({ decision: 'rejected', approver: { id: t.users.carol.sub, name: 'Carol Dumitru' } }),
+      expect.objectContaining({ decision: 'approved', approver: { id: t.users.bob.sub, name: 'Bob Ionescu' } }),
     ]);
   });
 

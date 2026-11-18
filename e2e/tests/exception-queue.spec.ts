@@ -28,7 +28,7 @@ test.describe('Exception queue', () => {
 
     await dashboard.open(invoice.title);
     await expect(dashboard.panel.status).toHaveText('Pending');
-    await expect(dashboard.panel.root).toContainText('PRICE_ABOVE_PO');
+    await expect(dashboard.panel.root).toContainText('PRICE_VARIANCE');
     await dashboard.panel.approve('Price increase agreed with purchasing.');
 
     await expect(dashboard.panel.status).toHaveText('Approved');

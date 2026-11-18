@@ -10,13 +10,13 @@ export const ERP_SOURCE = 'erp-procurement-mcp';
 // What the ERP Procurement MCP server submits when an invoice fails three-way matching.
 export function invoiceException(id: string, overrides: Partial<CreateRequestBody> = {}): CreateRequestBody {
   return {
-    title: `INV-E2E-${id}: unit price 5% above PO`,
+    title: `INV-E2E-${id}: PRICE_VARIANCE`,
     type: 'invoice_exception',
     source: ERP_SOURCE,
     externalRef: `INV-E2E-${id}`,
     priority: 'high',
     amount: { amountMinor: 1_234_500, currency: 'RON' },
-    metadata: { exceptionCodes: ['PRICE_ABOVE_PO'], supplier: 'Carpathian Steel SA' },
+    metadata: { exceptionCodes: ['PRICE_VARIANCE'], supplier: 'Somes Industrial Components SRL' },
     tags: ['finance', 'price-variance'],
     ...overrides,
   };

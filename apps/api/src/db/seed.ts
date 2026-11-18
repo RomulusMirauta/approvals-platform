@@ -41,39 +41,41 @@ const invoice = (ref: string, title: string, supplier: string, exceptionCodes: s
   metadata: { exceptionCodes, supplier },
 });
 
+// The invoice exceptions match the ERP Procurement MCP server's sample data (same invoices, suppliers, totals
+// and exception codes), so a request it files looks exactly like these.
 const SEED_REQUESTS: SeedRequest[] = [
   {
     by: 'agent',
     hoursAgo: 120,
-    body: { ...invoice('INV-1002', 'quantity billed exceeds goods received', 'Dacia Parts SRL', ['QTY_OVER_RECEIPT'], 1_245_000, 'RON'), tags: ['finance', 'quantity-variance'] },
-    outcome: { by: 'bob', decision: 'approved', comment: 'Remaining 20 units arrived this morning, receipt updated.' },
+    body: { ...invoice('INV-1002', 'DUPLICATE_INVOICE, QUANTITY_EXCEEDS_PO', 'Carpathian Office Supplies SRL', ['DUPLICATE_INVOICE', 'QUANTITY_EXCEEDS_PO'], 966_000, 'RON'), priority: 'high', tags: ['finance', 'duplicate-invoice', 'quantity-exceeds-po'] },
+    outcome: { by: 'carol', decision: 'rejected', comment: 'Same supplier invoice number as INV-1001, which is already paid.' },
   },
   {
     by: 'agent',
     hoursAgo: 30,
-    body: { ...invoice('INV-1003', 'unit price 8% above PO', 'Carpathian Steel SA', ['PRICE_ABOVE_PO'], 3_870_050, 'RON'), priority: 'high', tags: ['finance', 'price-variance'] },
-    comments: [{ by: 'bob', body: 'Asked purchasing whether the steel surcharge was agreed.' }],
+    body: { ...invoice('INV-1003', 'PRICE_VARIANCE', 'Somes Industrial Components SRL', ['PRICE_VARIANCE'], 360_240, 'RON'), tags: ['finance', 'price-variance'] },
+    comments: [{ by: 'bob', body: 'Asked purchasing whether the 8% increase on the bolts was agreed.' }],
   },
   {
     by: 'agent',
     hoursAgo: 96,
-    body: { ...invoice('INV-1005', 'possible duplicate of INV-0998', 'Transilvania Logistics SRL', ['DUPLICATE_SUSPECTED'], 560_000, 'RON'), priority: 'high', tags: ['finance', 'duplicate'] },
-    outcome: { by: 'carol', decision: 'rejected', comment: 'Same delivery note as INV-0998, which is already paid.' },
+    body: { ...invoice('INV-1005', 'QUANTITY_NOT_RECEIVED', 'Somes Industrial Components SRL', ['QUANTITY_NOT_RECEIVED'], 277_500, 'RON'), tags: ['finance', 'quantity-not-received'] },
+    outcome: { by: 'bob', decision: 'approved', comment: 'The remaining 30 bearings arrived this morning; receipt updated.' },
   },
   {
     by: 'agent',
     hoursAgo: 20,
-    body: { ...invoice('INV-1006', 'no matching purchase order', 'Euro Office Supplies GmbH', ['PO_NOT_FOUND'], 89_900, 'EUR'), tags: ['finance', 'missing-po'] },
+    body: { ...invoice('INV-1006', 'LINE_NOT_ON_PO', 'Brandt Elektrotechnik GmbH', ['LINE_NOT_ON_PO'], 499_000, 'EUR'), tags: ['finance', 'line-not-on-po'] },
   },
   {
     by: 'agent',
     hoursAgo: 6,
-    body: { ...invoice('INV-1008', 'unit price 3% above PO and VAT mismatch', 'Carpathian Steel SA', ['PRICE_ABOVE_PO', 'VAT_MISMATCH'], 1_120_400, 'RON'), priority: 'high', tags: ['finance', 'price-variance', 'tax'] },
+    body: { ...invoice('INV-1008', 'CURRENCY_MISMATCH', 'Napoca Freight SRL', ['CURRENCY_MISMATCH'], 229_500, 'EUR'), tags: ['finance', 'currency-mismatch'] },
   },
   {
     by: 'agent',
     hoursAgo: 2,
-    body: { ...invoice('INV-1009', 'invoice received before goods', 'Banat Agro Coop', ['NO_GOODS_RECEIPT'], 215_000, 'EUR'), priority: 'low', tags: ['finance'] },
+    body: { ...invoice('INV-1009', 'SUPPLIER_MISMATCH', 'Carpathian Office Supplies SRL', ['SUPPLIER_MISMATCH'], 32_000, 'RON'), priority: 'high', tags: ['finance', 'supplier-mismatch'] },
   },
   {
     by: 'alice',

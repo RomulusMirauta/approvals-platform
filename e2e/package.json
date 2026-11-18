@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "e2e": "playwright test --project=chromium",
+    "smoke": "playwright test --project=chromium --grep @smoke",
     "screenshots": "playwright test --project=screenshots",
     "report": "playwright show-report",
     "typecheck": "tsc --noEmit"

@@ -1,0 +1,42 @@
+name: Production smoke
+
+# A few read-only checks against the live demo every night, half an hour after the 03:00 UTC demo reset
+# (vercel.json crons), so a broken production deploy or database shows up even when nobody opens the site.
+# Only the @smoke tests run (e2e/tests/smoke.spec.ts): they sign in, look and open, and write nothing.
+# The production domain has no Vercel deployment protection, so no bypass secret is needed.
+on:
+  schedule:
+    - cron: '30 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-smoke
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: Smoke tests on production
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+        working-directory: e2e
+      - run: npm run build:contracts
+      - run: npm run smoke -w @approvals/e2e
+        env:
+          E2E_BASE_URL: https://approvals-platform-eta.vercel.app
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: production-smoke-report
+          path: e2e/playwright-report
+          retention-days: 14

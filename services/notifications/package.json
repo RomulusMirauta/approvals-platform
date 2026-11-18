@@ -1,6 +1,6 @@
 {
   "name": "@approvals/notifications",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Notification service: consumes request events from the Postgres outbox and notifies people.",
   "type": "module",
@@ -14,8 +14,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@approvals/api": "^0.1.0",
-    "@approvals/contracts": "^0.1.0",
+    "@approvals/api": "^0.2.0",
+    "@approvals/contracts": "^0.2.0",
     "drizzle-orm": "^0.45.4"
   },
   "devDependencies": {

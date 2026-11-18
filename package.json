@@ -1,6 +1,6 @@
 {
   "name": "approvals-platform",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Human-in-the-loop approvals for AI agents: a versioned REST API with OpenAPI docs and a React dashboard for approving requests and working the exception queue.",
   "author": "Romulus Mirăuță (https://github.com/RomulusMirauta)",

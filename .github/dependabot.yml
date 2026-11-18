@@ -1,0 +1,26 @@
+# Weekly dependency updates. The root entry covers every npm workspace (one shared lockfile).
+# Minor and patch bumps come as one grouped PR (auto-merged once the required checks pass,
+# see workflows/dependabot-auto-merge.yml); each major bump gets its own PR for review.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor-and-patch:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: chore(deps)
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      actions-minor-and-patch:
+        update-types: [minor, patch]
+    commit-message:
+      prefix: ci(deps)

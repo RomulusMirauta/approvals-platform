@@ -1,6 +1,6 @@
 {
   "name": "@approvals/e2e",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Playwright end-to-end tests for the approvals API and dashboard.",
   "type": "module",
@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@approvals/contracts": "^0.1.0",
+    "@approvals/contracts": "^0.2.0",
     "@playwright/test": "^1.65.1",
     "tsx": "^4.23.15"
   }

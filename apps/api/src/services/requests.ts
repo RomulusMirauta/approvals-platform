@@ -17,6 +17,7 @@ import { seesAllRequests, type TokenPayload } from '../auth.js';
 import type { Db } from '../db/client.js';
 import { approvals, comments, requests, requestTags, tags } from '../db/schema.js';
 import { conflict, forbidden, notFound } from '../errors.js';
+import { recordEvent } from './outbox.js';
 
 // The parsed (output) types: defaults applied, strings trimmed.
 type CreateInput = z.output<typeof CreateRequestBody>;
@@ -172,6 +173,21 @@ async function tryCreate(db: Db, viewer: TokenPayload, body: CreateInput): Promi
 
     if (inserted) {
       await attachTags(tx, inserted.id, body.tags);
+      // Only a real insert is an event: an idempotent retry that finds the existing request changes nothing.
+      await recordEvent(
+        tx,
+        'request.created',
+        {
+          requestId: inserted.id,
+          requesterId: viewer.sub,
+          title: body.title,
+          type: body.type,
+          priority: body.priority,
+          source: body.source,
+          externalRef: body.externalRef ?? null,
+        },
+        viewer,
+      );
       return { created: true, request: await getRequest(tx, viewer, inserted.id) };
     }
 
@@ -206,12 +222,22 @@ async function attachTags(tx: Db, requestId: string, names: string[]) {
 // the second one sees the first one's change and gets a 409.
 async function lockRequest(tx: Db, viewer: TokenPayload, id: string) {
   const [row] = await tx
-    .select({ status: requests.status, requesterId: requests.requesterId })
+    .select({
+      requestId: requests.id,
+      status: requests.status,
+      requesterId: requests.requesterId,
+      title: requests.title,
+      type: requests.type,
+      priority: requests.priority,
+      source: requests.source,
+      externalRef: requests.externalRef,
+    })
     .from(requests)
     .where(and(eq(requests.id, id), visibleTo(viewer)))
     .for('update');
   if (!row) throw notFound();
-  return row;
+  const { status, ...eventFields } = row;
+  return { status, requesterId: row.requesterId, eventFields };
 }
 
 export async function decideRequest(db: Db, viewer: TokenPayload, id: string, body: DecisionInput) {
@@ -224,6 +250,7 @@ export async function decideRequest(db: Db, viewer: TokenPayload, id: string, bo
     // The database clock, like created_at: an app server with a skewed clock can't record a decision before creation.
     await tx.update(requests).set({ status: body.decision, decidedAt: sql`now()`, updatedAt: sql`now()` }).where(eq(requests.id, id));
     await tx.insert(approvals).values({ requestId: id, approverId: viewer.sub, decision: body.decision, comment: body.comment });
+    await recordEvent(tx, `request.${body.decision}`, row.eventFields, viewer, { decision: body.decision, comment: body.comment });
   });
   return getRequest(db, viewer, id);
 }
@@ -237,6 +264,7 @@ export async function cancelRequest(db: Db, viewer: TokenPayload, id: string) {
     if (row.status !== 'pending') throw conflict(`The request is already ${row.status}`);
 
     await tx.update(requests).set({ status: 'cancelled', decidedAt: sql`now()`, updatedAt: sql`now()` }).where(eq(requests.id, id));
+    await recordEvent(tx, 'request.cancelled', row.eventFields, viewer);
   });
   return getRequest(db, viewer, id);
 }

@@ -2,12 +2,14 @@
 //   users 1:N requests (requester), users 1:N approvals (approver), users 1:N comments (author)
 //   requests 1:N approvals, requests 1:N comments
 //   requests N:M tags, through request_tags
+//   users 1:N notifications (recipient); outbox_events stands alone (it is a queue, not domain data)
 // Rules that must never break live in the database as constraints, not only in application code.
 import { relations, sql } from 'drizzle-orm';
 import {
   bigint,
   check,
   index,
+  integer,
   jsonb,
   pgEnum,
   pgTable,
@@ -18,7 +20,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
-import { DECISIONS, PRIORITIES, REQUEST_STATUSES, REQUEST_TYPES, ROLES } from '@approvals/contracts';
+import { DECISIONS, PRIORITIES, REQUEST_STATUSES, REQUEST_TYPES, ROLES, type EventType, type RequestEvent } from '@approvals/contracts';
 
 export const roleEnum = pgEnum('user_role', ROLES);
 export const requestTypeEnum = pgEnum('request_type', REQUEST_TYPES);
@@ -141,7 +143,53 @@ export const requestTags = pgTable(
   (table) => [primaryKey({ columns: [table.requestId, table.tagId] }), index('request_tags_tag_id').on(table.tagId)],
 );
 
-export const usersRelations = relations(users, ({ many }) => ({
+// The transactional outbox: the API inserts an event in the same transaction as the change it describes, and
+// the notification service (services/notifications) consumes it. The table doubles as the queue.
+export const outboxEvents = pgTable(
+  'outbox_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    type: text('type').$type<EventType>().notNull(),
+    payload: jsonb('payload').$type<RequestEvent>().notNull(),
+    createdAt: createdAt(),
+    processedAt: timestamp('processed_at', { withTimezone: true }),
+    attempts: integer('attempts').notNull().default(0),
+    lastError: text('last_error'),
+    // Not before this time: a failed event waits here for its retry (exponential backoff).
+    availableAt: timestamp('available_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // Partial: the worker only looks for unprocessed events, and processed ones would make the index grow forever.
+    index('outbox_events_unprocessed').on(table.availableAt).where(sql`${table.processedAt} is null`),
+  ],
+);
+
+// Written by the notification service, read through the API.
+export const notifications = pgTable(
+  'notifications',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    // No foreign key: processed outbox events may be pruned, and the notification outlives them.
+    eventId: uuid('event_id').notNull(),
+    recipientId: uuid('recipient_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    requestId: uuid('request_id')
+      .notNull()
+      .references(() => requests.id, { onDelete: 'cascade' }),
+    event: text('event').$type<EventType>().notNull(),
+    message: text('message').notNull(),
+    createdAt: createdAt(),
+    readAt: timestamp('read_at', { withTimezone: true }),
+  },
+  (table) => [
+    // Idempotency: delivery is at-least-once, so an event delivered twice must not notify anyone twice.
+    unique('notifications_once_per_event').on(table.eventId, table.recipientId),
+    index('notifications_recipient_created_at').on(table.recipientId, table.createdAt),
+  ],
+);
+
+export const usersRelations =relations(users, ({ many }) => ({
   requests: many(requests),
   approvals: many(approvals),
   comments: many(comments),

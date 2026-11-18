@@ -5,7 +5,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import * as Sentry from '@sentry/node';
 import { openDatabase } from '@approvals/api/db/client';
 import { initSentry } from '@approvals/api/sentry';
-import { drainOnce } from './drain.js';
+import { defaultWebhook, drainOnce } from './drain.js';
 import { logger } from './logger.js';
 
 const BATCH_SIZE = 20;
@@ -16,6 +16,9 @@ const once = process.argv.includes('--once');
 
 // Same settings as the API (off without SENTRY_DSN); one Sentry project for both, told apart by the service tag.
 initSentry(process.env, { initialScope: { tags: { service: 'notifications' } } });
+
+// Checks WEBHOOK_SIGNING_SECRET now: a malformed one stops the worker before it claims any event.
+defaultWebhook();
 
 // PGlite runs inside one process, so the worker can't share the API's local database: it needs a real Postgres.
 const url = process.env.DATABASE_URL;

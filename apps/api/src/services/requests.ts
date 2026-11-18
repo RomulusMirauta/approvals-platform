@@ -261,11 +261,20 @@ export async function decideRequest(db: Db, viewer: TokenPayload, id: string, bo
     if (row.status !== 'pending') throw conflict(`The request is already ${row.status}`);
 
     // The database clock, like created_at: an app server with a skewed clock can't record a decision before creation.
-    await tx.update(requests).set({ status: body.decision, decidedAt: sql`now()`, updatedAt: sql`now()` }).where(eq(requests.id, id));
+    const [decided] = await tx
+      .update(requests)
+      .set({ status: body.decision, decidedAt: sql`now()`, updatedAt: sql`now()` })
+      .where(eq(requests.id, id))
+      .returning({ decidedAt: requests.decidedAt });
+    if (!decided?.decidedAt) throw new Error('Update returned no decision time');
     await tx.insert(approvals).values({ requestId: id, approverId: viewer.sub, decision: body.decision, comment: body.comment });
+    // Everything the ERP needs to act on the decision without calling back: the decider by user id (the token has
+    // no email), and the decision time the request itself records.
     await recordEvent(tx, `request.${body.decision}`, row.eventFields, viewer, httpRequestId, {
       decision: body.decision,
-      comment: body.comment,
+      comment: body.comment || null,
+      decidedBy: viewer.sub,
+      decidedAt: iso(decided.decidedAt),
     });
   });
   return getRequest(db, viewer, id);

@@ -1,6 +1,6 @@
 {
   "name": "@approvals/api",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Approvals REST API: Fastify, Drizzle ORM, Postgres, JWT, OpenAPI.",
   "type": "module",
@@ -18,7 +18,7 @@
     "seed": "tsx src/db/seed.ts"
   },
   "dependencies": {
-    "@approvals/contracts": "^0.1.0",
+    "@approvals/contracts": "^0.2.0",
     "@electric-sql/pglite": "^0.5.16",
     "@fastify/cors": "^11.4.3",
     "@fastify/helmet": "^13.2.0",

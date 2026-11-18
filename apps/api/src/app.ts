@@ -1,0 +1,84 @@
+// Builds the Fastify app without starting it, so tests can drive it with app.inject() and no open port.
+import Fastify, { type FastifyServerOptions } from 'fastify';
+import cors from '@fastify/cors';
+import helmet from '@fastify/helmet';
+import jwt from '@fastify/jwt';
+import rateLimit from '@fastify/rate-limit';
+import swagger from '@fastify/swagger';
+import swaggerUi from '@fastify/swagger-ui';
+import { jsonSchemaTransform, serializerCompiler, validatorCompiler, type ZodTypeProvider } from 'fastify-type-provider-zod';
+import { z } from 'zod';
+import type { Db } from './db/client.js';
+import { registerErrorHandlers } from './errors.js';
+import { authRoutes } from './routes/auth.js';
+import { reportRoutes } from './routes/reports.js';
+import { requestRoutes } from './routes/requests.js';
+
+export interface AppOptions {
+  db: Db;
+  jwtSecret: string;
+  logger?: FastifyServerOptions['logger'];
+  corsOrigin?: string;
+  // Tests turn it off so many logins in a row don't hit the login limit.
+  rateLimit?: boolean;
+}
+
+export async function buildApp({ db, jwtSecret, logger = false, corsOrigin, rateLimit: limit = true }: AppOptions) {
+  const app = Fastify({ logger }).withTypeProvider<ZodTypeProvider>();
+
+  // The zod schemas from @approvals/contracts validate input, serialize output (dropping unknown fields)
+  // and generate the OpenAPI document.
+  app.setValidatorCompiler(validatorCompiler);
+  app.setSerializerCompiler(serializerCompiler);
+  registerErrorHandlers(app);
+
+  // The CSP is relaxed only as far as Swagger UI at /docs needs (its inline styles and the validator badge).
+  await app.register(helmet, {
+    contentSecurityPolicy: {
+      directives: { 'style-src': ["'self'", 'https:', "'unsafe-inline'"], 'img-src': ["'self'", 'data:', 'validator.swagger.io'] },
+    },
+  });
+  await app.register(cors, { origin: corsOrigin ?? process.env.CORS_ORIGIN ?? 'http://localhost:5173' });
+  if (limit) await app.register(rateLimit, { max: 300, timeWindow: '1 minute' });
+  await app.register(jwt, { secret: jwtSecret });
+
+  await app.register(swagger, {
+    openapi: {
+      openapi: '3.1.0',
+      info: {
+        title: 'Approvals API',
+        version: '1.0.0',
+        description: 'Human-in-the-loop approvals for AI agents. Errors use RFC 9457 problem details.',
+      },
+      tags: [
+        { name: 'auth', description: 'Sign in and the current user' },
+        { name: 'requests', description: 'Approval requests, decisions and comments' },
+        { name: 'reports', description: 'Tags and counters for the dashboard' },
+        { name: 'health', description: 'Liveness check' },
+      ],
+      components: { securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' } } },
+      // Every route needs a token unless it says security: [].
+      security: [{ bearerAuth: [] }],
+    },
+    transform: jsonSchemaTransform,
+  });
+  await app.register(swaggerUi, { routePrefix: '/docs' });
+
+  app.get(
+    '/health',
+    { schema: { tags: ['health'], security: [], response: { 200: z.object({ status: z.literal('ok') }) } } },
+    async () => ({ status: 'ok' as const }),
+  );
+
+  // Version prefix: a breaking change would ship as /v2 next to /v1.
+  await app.register(
+    async (v1) => {
+      await v1.register(authRoutes, { db });
+      await v1.register(requestRoutes, { db });
+      await v1.register(reportRoutes, { db });
+    },
+    { prefix: '/v1' },
+  );
+
+  return app;
+}

@@ -20,7 +20,8 @@ async function start() {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL must be set');
   const database = await openDatabase(url, { migrate: false });
-  // Behind Vercel's proxy, the client IP comes from X-Forwarded-For; the dashboard is on the same origin.
+  // Behind Vercel's proxy, the client IP comes from X-Forwarded-For, which Vercel overwrites (a client can't add
+  // entries), so the whole header is trusted. The dashboard is on the same origin.
   const instance = await buildApp({ db: database.db, jwtSecret: jwtSecret(), logger: loggerOptions(), trustProxy: true, cronSecret: cronSecret() });
   await instance.ready();
   return instance;

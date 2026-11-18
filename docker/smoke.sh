@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Smoke test for the Docker Compose stack, through the web service's single origin (nginx -> api):
 # the API is ready, a requester files two requests, the approver approves one and rejects the other, and the
-# notification worker turns both decisions into notifications for the requester (API -> outbox -> worker).
+# notification worker turns both decisions into notifications for the requester (API -> outbox -> worker); and a
+# client can't dodge the login rate limit by forging X-Forwarded-For.
 # Needs curl and jq. Usage: docker compose up -d --wait && docker/smoke.sh [base url]
 set -euo pipefail
 
@@ -56,10 +57,20 @@ for _ in $(seq 1 30); do
   found=$(jq --arg a "$approved_id" --arg r "$rejected_id" \
     '[.items[] | select((.requestId == $a and .event == "request.approved") or (.requestId == $r and .event == "request.rejected"))] | length' \
     <<<"$notifications")
-  if [[ $found == 2 ]]; then
-    echo "OK: the worker processed the outbox; alice has both notifications"
-    exit 0
-  fi
+  [[ $found == 2 ]] && break
   sleep 1
 done
-fail "the worker did not deliver the notifications within 30 s; alice has: $notifications"
+[[ $found == 2 ]] || fail "the worker did not deliver the notifications within 30 s; alice has: $notifications"
+echo "OK: the worker processed the outbox; alice has both notifications"
+
+# Last, because it uses up this client's login attempts for a minute (the limit is per IP, 10 a minute).
+echo "A forged X-Forwarded-For does not escape the login rate limit"
+limited=''
+for i in $(seq 1 12); do
+  # An empty body is refused before any password check, and still counts against the limit.
+  status=$(curl -sS -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
+    -H "X-Forwarded-For: 10.0.0.$i" --data '{}' "$BASE_URL/v1/auth/login")
+  if [[ $status == 429 ]]; then limited=$i; break; fi
+done
+[[ -n $limited ]] || fail 'twelve login attempts, each with another X-Forwarded-For, were never limited'
+echo "OK: limited at attempt $limited"

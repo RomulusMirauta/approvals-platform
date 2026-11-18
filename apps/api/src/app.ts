@@ -28,7 +28,8 @@ export interface AppOptions {
   rateLimit?: boolean;
   // Behind a proxy (Vercel, a load balancer) every request comes from the proxy's IP. Trusting it makes
   // request.ip the real client, so the rate limits apply per client instead of to everyone at once.
-  trustProxy?: boolean;
+  // true trusts every peer's X-Forwarded-For (the proxy must replace the header); a string only the listed proxies'.
+  trustProxy?: FastifyServerOptions['trustProxy'];
   // Set only on the public demo: adds GET /internal/reset-demo for the nightly cron.
   cronSecret?: string;
 }

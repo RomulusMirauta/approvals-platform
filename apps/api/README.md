@@ -17,7 +17,8 @@ Demo users (password `demo-password`, **demo only**): `alice@example.com` (reque
 
 | Method | Path | Who |
 | --- | --- | --- |
-| GET | `/health` | anyone |
+| GET | `/health` | anyone; liveness, never touches the database |
+| GET | `/ready` | anyone; readiness: 200 if the database answers `select 1` within 2 s, else 503 |
 | POST | `/v1/auth/login` | anyone (10/min) |
 | GET | `/v1/me` | signed in |
 | GET | `/v1/requests` | signed in; requesters and agents see their own |

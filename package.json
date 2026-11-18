@@ -12,6 +12,7 @@
   "workspaces": [
     "packages/contracts",
     "apps/api",
+    "services/notifications",
     "apps/web",
     "e2e"
   ],

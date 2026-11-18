@@ -4,6 +4,10 @@
   "private": true,
   "description": "Approvals REST API: Fastify, Drizzle ORM, Postgres, JWT, OpenAPI.",
   "type": "module",
+  "exports": {
+    "./db/client": "./src/db/client.ts",
+    "./db/schema": "./src/db/schema.ts"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/index.js",

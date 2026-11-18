@@ -40,6 +40,17 @@ describe('OpenAPI', () => {
     expect(doc.paths['/v1/requests']).toBeDefined();
     expect(doc.paths['/v1/requests/{id}/decision'].post).toBeDefined();
     expect(doc.components.securitySchemes.bearerAuth).toMatchObject({ type: 'http', scheme: 'bearer' });
+    expect(doc.paths['/docs/json']).toBeUndefined();
+  });
+
+  it('serves the docs page with a CSP relaxed only for Swagger UI', async () => {
+    const page = await t.app.inject({ method: 'GET', url: '/docs' });
+    expect(page.statusCode).toBe(200);
+    expect(page.body).toContain('/docs/json');
+    expect(page.headers['content-security-policy']).toContain('cdn.jsdelivr.net');
+
+    const api = await t.app.inject({ method: 'GET', url: '/health' });
+    expect(api.headers['content-security-policy']).not.toContain('cdn.jsdelivr.net');
   });
 });
 

@@ -5,10 +5,10 @@ import helmet from '@fastify/helmet';
 import jwt from '@fastify/jwt';
 import rateLimit from '@fastify/rate-limit';
 import swagger from '@fastify/swagger';
-import swaggerUi from '@fastify/swagger-ui';
 import { jsonSchemaTransform, serializerCompiler, validatorCompiler, type ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { Db } from './db/client.js';
+import { registerDocs } from './docs.js';
 import { registerErrorHandlers } from './errors.js';
 import { authRoutes } from './routes/auth.js';
 import { reportRoutes } from './routes/reports.js';
@@ -43,12 +43,8 @@ export async function buildApp({ db, jwtSecret, logger = false, corsOrigin, rate
     body === '' ? done(null, undefined) : parseJson(request, body.toString(), done),
   );
 
-  // The CSP is relaxed only as far as Swagger UI at /docs needs (its inline styles and the validator badge).
-  await app.register(helmet, {
-    contentSecurityPolicy: {
-      directives: { 'style-src': ["'self'", 'https:', "'unsafe-inline'"], 'img-src': ["'self'", 'data:', 'validator.swagger.io'] },
-    },
-  });
+  // Default security headers, including a strict CSP. Only /docs relaxes it (see docs.ts).
+  await app.register(helmet);
   await app.register(cors, { origin: corsOrigin ?? process.env.CORS_ORIGIN ?? 'http://localhost:5173' });
   if (limit) await app.register(rateLimit, { max: 300, timeWindow: '1 minute' });
   // Pinning the algorithm means a token can't pick a weaker one (or none) for itself.
@@ -74,7 +70,7 @@ export async function buildApp({ db, jwtSecret, logger = false, corsOrigin, rate
     },
     transform: jsonSchemaTransform,
   });
-  await app.register(swaggerUi, { routePrefix: '/docs' });
+  registerDocs(app);
 
   app.get(
     '/health',

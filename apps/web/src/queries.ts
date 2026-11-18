@@ -1,4 +1,4 @@
-import type { CreateRequestBody, DecisionBody, ListRequestsQuery, RequestDetail } from '@approvals/contracts';
+import type { CreateRequestBody, DecisionBody, ListRequestsQuery } from '@approvals/contracts';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './api';
 
@@ -18,33 +18,50 @@ export const useRequests = (query: ListRequestsQuery) =>
 
 export const useRequest = (id: string) => useQuery({ queryKey: ['request', id], queryFn: () => api.getRequest(id) });
 
-// A change to one request can move it between lists and change the counts, so the lists and stats
-// are refetched while the detail is updated straight from the response.
-function useRequestChanged() {
+// A change to one request can move it between lists and change the counts, so the request, the lists
+// and the stats are refetched.
+function useRefreshRequest() {
   const queryClient = useQueryClient();
-  return (request: RequestDetail) => {
-    queryClient.setQueryData(['request', request.id], request);
+  return (id: string) => {
+    void queryClient.invalidateQueries({ queryKey: ['request', id] });
     void queryClient.invalidateQueries({ queryKey: ['requests'] });
     void queryClient.invalidateQueries({ queryKey: ['stats'] });
     void queryClient.invalidateQueries({ queryKey: ['tags'] });
   };
 }
 
+// On success the detail is updated straight from the response. The refresh runs on errors too: a 409
+// means someone else acted first, and the panel should show what they did instead of still offering
+// Approve and Reject.
 export function useDecide(id: string) {
-  const onChanged = useRequestChanged();
-  return useMutation({ mutationFn: (body: DecisionBody) => api.decide(id, body), onSuccess: onChanged });
+  const queryClient = useQueryClient();
+  const refresh = useRefreshRequest();
+  return useMutation({
+    mutationFn: (body: DecisionBody) => api.decide(id, body),
+    onSuccess: (request) => queryClient.setQueryData(['request', id], request),
+    onSettled: () => refresh(id),
+  });
 }
 
 export function useCancel(id: string) {
-  const onChanged = useRequestChanged();
-  return useMutation({ mutationFn: () => api.cancel(id), onSuccess: onChanged });
+  const queryClient = useQueryClient();
+  const refresh = useRefreshRequest();
+  return useMutation({
+    mutationFn: () => api.cancel(id),
+    onSuccess: (request) => queryClient.setQueryData(['request', id], request),
+    onSettled: () => refresh(id),
+  });
 }
 
 export function useCreateRequest() {
-  const onChanged = useRequestChanged();
+  const queryClient = useQueryClient();
+  const refresh = useRefreshRequest();
   return useMutation({
     mutationFn: (body: CreateRequestBody) => api.createRequest(body),
-    onSuccess: (response) => onChanged(response.request),
+    onSuccess: ({ request }) => {
+      queryClient.setQueryData(['request', request.id], request);
+      refresh(request.id);
+    },
   });
 }
 

@@ -1,4 +1,5 @@
 import type { RequestDetail, User } from '@approvals/contracts';
+import { useEffect, useRef } from 'react';
 import { formatDateTime, formatMoney, PRIORITY_LABELS, TYPE_LABELS } from '../format';
 import { useCancel, useRequest } from '../queries';
 import { StatusBadge, Tags } from './Badges';
@@ -31,10 +32,17 @@ function RequestDetails({ request, user }: { request: RequestDetail; user: User 
   const canCancel = isPending && (isOwn || user.role === 'admin');
   const codes = exceptionCodes(request.metadata);
 
+  // Move focus into the panel when it opens, so keyboard and screen-reader users land on the request
+  // they picked. The panel is keyed by id, so this runs once per request, not on every refetch.
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => heading.current?.focus(), []);
+
   return (
     <>
       <header className="panel-header">
-        <h2>{request.title}</h2>
+        <h2 ref={heading} tabIndex={-1}>
+          {request.title}
+        </h2>
         <StatusBadge status={request.status} />
       </header>
 

@@ -118,6 +118,62 @@ describe('dashboard', () => {
     expect(alert.textContent).toContain('This request was already decided.');
   });
 
+  it('refreshes the request when someone else decided it first', async () => {
+    const carol = { id: '00000000-0000-4000-8000-000000000003', name: 'Carol Approver' };
+    let request = makeRequest();
+    signedInAsApprover({
+      [`GET /v1/requests/${request.id}`]: () => ({ body: request }),
+      [`POST /v1/requests/${request.id}/decision`]: () => {
+        // Carol approved it a moment before Bob clicked.
+        const decision = { id: crypto.randomUUID(), decision: 'approved' as const, comment: '', approver: carol, createdAt: new Date().toISOString() };
+        request = makeRequest({ status: 'approved', decisions: [decision] });
+        return {
+          status: 409,
+          body: { type: 'about:blank', title: 'Conflict', status: 409, detail: 'This request was already decided.' },
+        };
+      },
+    });
+    renderApp();
+
+    const panel = await openRequest('INV-1003');
+    await userEvent.click(within(panel).getByRole('button', { name: 'Approve' }));
+
+    expect(await within(panel).findByText('Approved by Carol Approver')).toBeTruthy();
+    expect(within(panel).queryByRole('button', { name: 'Approve' })).toBeNull();
+    expect(within(panel).queryByRole('button', { name: 'Reject' })).toBeNull();
+  });
+
+  it('steps back a page when the last item on the last page is decided', async () => {
+    const request = makeRequest();
+    const others = Array.from({ length: 20 }, (_, i) =>
+      makeRequest({ id: `20000000-0000-4000-8000-${String(i).padStart(12, '0')}`, title: `Other request ${i + 1}` }),
+    );
+    let total = 21;
+    const { calls } = signedInAsApprover({
+      // 20 per page: page 1 is full and page 2 holds the invoice, until it is approved and leaves the queue.
+      'GET /v1/requests': (_body, url) => {
+        const page = Number(url.searchParams.get('page'));
+        const items = page === 1 ? others : total > 20 ? [request] : [];
+        return { body: { items, page, pageSize: 20, total } };
+      },
+      [`POST /v1/requests/${request.id}/decision`]: () => {
+        total = 20;
+        return { body: makeRequest({ status: 'approved' }) };
+      },
+    });
+    renderApp();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Next' }));
+    expect(await screen.findByText(/Page 2 of 2/)).toBeTruthy();
+    const panel = await openRequest('INV-1003');
+    await userEvent.click(within(panel).getByRole('button', { name: 'Approve' }));
+
+    expect(await screen.findByText(/Page 1 of 1 · 20 requests/)).toBeTruthy();
+    expect(screen.getByText('Other request 1')).toBeTruthy();
+    expect(screen.queryByText(/Page 2 of 1/)).toBeNull();
+    expect(calls.filter((call) => call.url.pathname === '/v1/requests').at(-1)?.url.searchParams.get('page')).toBe('1');
+  });
+
   it('hides approve and reject on your own request', async () => {
     setToken('alice-token');
     const request = makeRequest();
@@ -133,6 +189,8 @@ describe('dashboard', () => {
     const panel = await openRequest('INV-1003');
     expect(await within(panel).findByRole('button', { name: 'Cancel request' })).toBeTruthy();
     expect(within(panel).queryByRole('button', { name: 'Approve' })).toBeNull();
+    // Opening the panel moves focus to its heading.
+    expect(document.activeElement).toBe(within(panel).getByRole('heading', { level: 2 }));
   });
 
   it('goes back to the login screen when the session expires', async () => {

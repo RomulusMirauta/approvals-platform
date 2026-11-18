@@ -52,7 +52,7 @@ export function NewRequestForm({ onCreated, onCancel }: Props) {
       <h2 id="new-request-title">New request</h2>
 
       <Field id="title" label="Title" error={errorFor('title')}>
-        <input id="title" value={title} maxLength={200} onChange={(e) => setTitle(e.target.value)} />
+        <input id="title" {...describedBy('title', errorFor('title'))} value={title} maxLength={200} onChange={(e) => setTitle(e.target.value)} />
       </Field>
 
       <div className="field-row">
@@ -77,20 +77,20 @@ export function NewRequestForm({ onCreated, onCancel }: Props) {
       </div>
 
       <Field id="description" label="Description" error={errorFor('description')}>
-        <textarea id="description" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
+        <textarea id="description" {...describedBy('description', errorFor('description'))} rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
       </Field>
 
       <div className="field-row">
         <Field id="amount" label="Amount (optional)" error={errorFor('amount')}>
-          <input id="amount" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <input id="amount" {...describedBy('amount', errorFor('amount'))} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
         </Field>
         <Field id="currency" label="Currency" error={errorFor('amount.currency')}>
-          <input id="currency" maxLength={3} value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} />
+          <input id="currency" {...describedBy('currency', errorFor('amount.currency'))} maxLength={3} value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} />
         </Field>
       </div>
 
       <Field id="tags" label="Tags, separated by commas" error={errorFor('tags')}>
-        <input id="tags" placeholder="finance, q4" value={tags} onChange={(e) => setTags(e.target.value)} />
+        <input id="tags" {...describedBy('tags', errorFor('tags'))} placeholder="finance, q4" value={tags} onChange={(e) => setTags(e.target.value)} />
       </Field>
 
       <ErrorMessage error={create.error} />
@@ -115,12 +115,18 @@ function Field({ id, label, error, children }: FieldProps) {
       <label htmlFor={id}>{label}</label>
       {children}
       {error && (
-        <p className="error">
+        <p id={`${id}-error`} role="alert" className="error">
           {error}
         </p>
       )}
     </div>
   );
+}
+
+// Marks an input invalid and points it at the error Field renders under it, so screen readers read the
+// error together with the field (the same pattern as DecisionForm).
+function describedBy(id: string, error: string | undefined) {
+  return { 'aria-invalid': error !== undefined, 'aria-describedby': error ? `${id}-error` : undefined };
 }
 
 // The form takes major units ("1250.50") and the API wants minor units (125050), converted per currency.

@@ -55,12 +55,17 @@ export class ApiError extends Error {
   }
 }
 
+// Where the API lives. Empty by default, so paths stay relative (/v1/...) and the Vite dev server proxies
+// them. Set VITE_API_URL at build time (for example https://api.example.com) when the dashboard and the
+// API are deployed on different origins. A trailing slash is dropped so the paths join cleanly.
+const API_URL = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const response = await fetch(path, {
+  const response = await fetch(`${API_URL}${path}`, {
     method,
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),

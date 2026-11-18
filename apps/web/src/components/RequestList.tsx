@@ -1,4 +1,5 @@
 import type { ListRequestsQuery, RequestSummary } from '@approvals/contracts';
+import { useEffect } from 'react';
 import { formatAge, formatDateTime, formatMoney, TYPE_LABELS } from '../format';
 import { useRequests } from '../queries';
 import { PriorityBadge, StatusBadge, Tags } from './Badges';
@@ -12,12 +13,21 @@ type Props = {
 };
 
 export function RequestList({ query, selectedId, onSelect, onPageChange }: Props) {
-  const { data, error, isPending, isFetching } = useRequests(query);
+  const { data, error, isPending, isFetching, isPlaceholderData } = useRequests(query);
+
+  // An empty result still has one (empty) page.
+  const lastPage = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1;
+  // Deciding the last item on the last page shrinks the list under you: step back to the new last page
+  // instead of showing "Page 2 of 1".
+  const pastTheEnd = data !== undefined && !isPlaceholderData && data.page > lastPage;
+  useEffect(() => {
+    if (pastTheEnd) onPageChange(lastPage);
+  }, [pastTheEnd, lastPage, onPageChange]);
 
   if (isPending) return <p className="muted">Loading requests…</p>;
   if (error) return <ErrorMessage error={error} />;
 
-  const lastPage = Math.max(1, Math.ceil(data.total / data.pageSize));
+  const page = Math.min(data.page, lastPage);
 
   return (
     <section className="request-list" aria-label="Requests" aria-busy={isFetching}>
@@ -34,13 +44,13 @@ export function RequestList({ query, selectedId, onSelect, onPageChange }: Props
       )}
 
       <nav className="pagination" aria-label="Pages">
-        <button type="button" className="button" disabled={data.page <= 1} onClick={() => onPageChange(data.page - 1)}>
+        <button type="button" className="button" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>
           Previous
         </button>
         <span>
-          Page {data.page} of {lastPage} · {data.total} {data.total === 1 ? 'request' : 'requests'}
+          Page {page} of {lastPage} · {data.total} {data.total === 1 ? 'request' : 'requests'}
         </span>
-        <button type="button" className="button" disabled={data.page >= lastPage} onClick={() => onPageChange(data.page + 1)}>
+        <button type="button" className="button" disabled={page >= lastPage} onClick={() => onPageChange(page + 1)}>
           Next
         </button>
       </nav>

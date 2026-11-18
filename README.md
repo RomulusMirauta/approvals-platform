@@ -30,6 +30,18 @@ Sign-in, with one-click demo accounts for each role.
 - **Notification service:** [`services/notifications`](services/notifications), a worker that consumes events from a Postgres-backed queue (see below)
 - **Tests:** Vitest for the API and the dashboard; Playwright end-to-end tests in [`e2e/`](e2e)
 
+## Run everything with Docker
+
+No Node needed, only Docker:
+
+```bash
+docker compose up --build
+```
+
+Then open the dashboard at **http://localhost:8080** and sign in as `bob@example.com` (approver), `alice@example.com` (requester) or `carol@example.com` (admin), password `demo-password`. The API is also on http://localhost:3000 (docs at http://localhost:3000/docs).
+
+[compose.yaml](compose.yaml) runs each part as its own service, built from one multi-stage [Dockerfile](Dockerfile): `db` (Postgres 17), `migrate` (applies the migrations and adds the demo data, then exits), `api` (Fastify), `worker` (the notification service) and `web` (the built dashboard on nginx, which proxies `/v1`, `/docs`, `/health` and `/ready` to the API, so the browser sees one origin). The API and the worker never call each other: the API writes events to the outbox table in the same transaction as each change, and the worker consumes them (see [Events and notifications](#events-and-notifications)). The secrets in compose.yaml are public, development-only defaults; set `JWT_SECRET` and `POSTGRES_PASSWORD` in the environment anywhere else. `docker compose down -v` stops everything and deletes the data; [docker/smoke.sh](docker/smoke.sh) walks one approval through the running stack, as the [Docker workflow](.github/workflows/docker.yml) does in CI.
+
 ## Data model
 
 ```mermaid

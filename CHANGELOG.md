@@ -13,10 +13,12 @@ All workspaces share one version.
 - The request id is stored with each outbox event (migration `0003`); the notification worker logs it and sends it to the webhook as `X-Request-Id`.
 - Structured JSON logs: one line per API request (method, route, status, duration, request id, user id, Vercel id), `LOG_LEVEL`, and redaction of authorization headers, cookies, passwords, tokens and database URLs; the worker logs JSON too.
 - Sentry error reporting when `SENTRY_DSN` is set: unexpected 500s from the API (tagged with the request id and user id, flushed before the response), dead-lettered events and failed drains from the worker. `GET /internal/sentry-check` (behind `CRON_SECRET`) checks the wiring.
+- Docker: `docker compose up` runs Postgres, a one-shot migrate-and-seed job, the API, the notification worker and the dashboard (nginx, proxying the API on the same origin) as separate services, from one multi-stage Dockerfile with non-root images that hold only production dependencies. CI builds them and walks an approval through the running stack (`Docker Compose smoke test`).
 
 ### Changed
 
 - Dependabot no longer proposes major `@types/node` updates: the types follow the oldest supported Node (22).
+- `tsx` is a runtime dependency of the notification service, which runs its TypeScript sources directly.
 
 ## [0.2.0] - 2026-11-18
 

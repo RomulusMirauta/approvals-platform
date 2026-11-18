@@ -1,4 +1,4 @@
-import { cleanup, screen, within } from '@testing-library/react';
+import { cleanup, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setToken } from '../src/api';
@@ -171,7 +171,12 @@ describe('dashboard', () => {
     expect(await screen.findByText(/Page 1 of 1 · 20 requests/)).toBeTruthy();
     expect(screen.getByText('Other request 1')).toBeTruthy();
     expect(screen.queryByText(/Page 2 of 1/)).toBeNull();
-    expect(calls.filter((call) => call.url.pathname === '/v1/requests').at(-1)?.url.searchParams.get('page')).toBe('1');
+    // Page 1 first shows from cache, then refetches; wait for that request instead of checking at once.
+    const decidedAt = calls.findIndex((call) => call.url.pathname.endsWith('/decision'));
+    await waitFor(() => {
+      const pagesAfter = calls.slice(decidedAt).filter((call) => call.url.pathname === '/v1/requests');
+      expect(pagesAfter.map((call) => call.url.searchParams.get('page'))).toContain('1');
+    });
   });
 
   it('hides approve and reject on your own request', async () => {

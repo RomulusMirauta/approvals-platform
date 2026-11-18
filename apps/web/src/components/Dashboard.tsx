@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useMe } from '../queries';
 import { ErrorMessage } from './ErrorMessage';
 import { NewRequestForm } from './NewRequestForm';
+import { NotificationBell } from './NotificationBell';
 import { RequestFilters, type Filters } from './RequestFilters';
 import { RequestList } from './RequestList';
 import { RequestPanel } from './RequestPanel';
@@ -50,6 +51,7 @@ function Workspace({ user, onSignOut }: { user: User; onSignOut: () => void }) {
       <header className="app-header">
         <span className="brand">Approvals</span>
         <div className="user">
+          <NotificationBell onOpen={setSelectedId} />
           <span>
             {user.name} <span className="badge">{user.role}</span>
           </span>

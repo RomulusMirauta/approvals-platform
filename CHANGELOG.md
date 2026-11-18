@@ -19,10 +19,17 @@ All workspaces share one version.
 
 ### Changed
 
-- The `comment` of a decision event is `null`, not `""`, when the approver left none.
-
+- A decision event has no `comment` key when the approver left none (it was `""`). The contract still accepts `null`, which main wrote for a while before this release.
+- `TRUST_PROXY` accepts the proxy's addresses (IPs, CIDR ranges, `loopback`, `uniquelocal`) besides `true` and `false`, and the API refuses to start on any other value. Docker Compose trusts only its private network.
+- Docker Compose no longer publishes the API on port 3000: it is reached through the dashboard's origin (http://localhost:8080/v1, /docs).
 - Dependabot no longer proposes major `@types/node` updates: the types follow the oldest supported Node (22).
 - `tsx` is a runtime dependency of the notification service, which runs its TypeScript sources directly.
+
+### Fixed
+
+- Docker: a forged `X-Forwarded-For` let a client dodge the login rate limit (nginx appended to the header and the API trusted its left-most entry).
+- Docker: the dashboard answered 502 after the api container was recreated (nginx had resolved `api` once); its healthcheck now also checks `/ready` through nginx.
+- `verifyWebhook` accepted a `webhook-timestamp` that was not plain digits (`" 1763467200"`, `"1763467200.0"`) and checked the signature over the re-formatted number instead of the header as sent.
 
 ## [0.2.0] - 2026-11-18
 

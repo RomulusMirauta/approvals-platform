@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { getToken, setToken, setUnauthorizedHandler } from './api';
 import { Dashboard } from './components/Dashboard';
 import { Login } from './components/Login';
+import { ServiceBanner } from './components/ServiceBanner';
 
 export function App() {
   const queryClient = useQueryClient();
@@ -28,5 +29,10 @@ export function App() {
     setSignedIn(true);
   }
 
-  return signedIn ? <Dashboard onSignOut={signOut} /> : <Login onSignedIn={signIn} />;
+  return (
+    <>
+      <ServiceBanner />
+      {signedIn ? <Dashboard onSignOut={signOut} /> : <Login onSignedIn={signIn} />}
+    </>
+  );
 }

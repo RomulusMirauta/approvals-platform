@@ -12,6 +12,16 @@ export function ErrorMessage({ error }: { error: unknown }) {
     );
   }
 
+  // The API or the gateway in front of it is briefly down (cold start, database waking up, a deploy). That isn't
+  // the user's fault and needs no action from them, so say so plainly instead of showing the raw status.
+  if (error.status === 502 || error.status === 503 || error.status === 504) {
+    return (
+      <p role="alert" className="error">
+        The service is temporarily unavailable. Please try again in a moment.
+      </p>
+    );
+  }
+
   return (
     <div role="alert" className="error">
       <strong>{error.title}</strong>

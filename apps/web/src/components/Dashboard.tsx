@@ -49,7 +49,7 @@ function Workspace({ user, onSignOut }: { user: User; onSignOut: () => void }) {
   return (
     <>
       <header className="app-header">
-        <span className="brand">Approvals</span>
+        <h1 className="brand">Approvals</h1>
         <div className="user">
           <NotificationBell onOpen={setSelectedId} />
           <span>

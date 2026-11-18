@@ -1,3 +1,4 @@
+import { createHmac, randomBytes } from 'node:crypto';
 import * as Sentry from '@sentry/node';
 import type { ErrorEvent } from '@sentry/node';
 import { pino } from 'pino';
@@ -112,6 +113,38 @@ describe('drainOnce', () => {
     expect(url).toBe('https://hooks.example.com/approvals');
     expect(init?.headers).toMatchObject({ 'idempotency-key': event.id });
     expect(JSON.parse(String(init?.body))).toMatchObject({ id: event.id, type: 'request.cancelled', payload: { requestId: request.id } });
+  });
+
+  it('signs the delivery the Standard Webhooks way when there is a signing secret', async () => {
+    const fetch = respond(204);
+    const secret = randomBytes(32);
+    const now = Date.UTC(2026, 10, 18, 12);
+    const event = await emit('request.approved', { decision: 'approved' }, 'trace-signed-1');
+    await drainOnce(database.db, { webhook: { ...webhook(fetch), secret, now: () => now } });
+
+    const init = fetch.mock.calls[0]![1]!;
+    const body = String(init.body);
+    // Computed here from the spec, not with the code under test: v1, then base64 HMAC-SHA256 of "id.timestamp.body".
+    const expected = createHmac('sha256', secret).update(`${event.id}.${now / 1_000}.${body}`).digest('base64');
+    expect(init.headers).toEqual({
+      'content-type': 'application/json',
+      'idempotency-key': event.id,
+      'x-request-id': 'trace-signed-1',
+      'webhook-id': event.id,
+      'webhook-timestamp': String(now / 1_000),
+      'webhook-signature': `v1,${expected}`,
+    });
+    expect(Object.keys(JSON.parse(body))).toEqual(['id', 'type', 'createdAt', 'payload']);
+  });
+
+  it('still delivers, unsigned, without a signing secret', async () => {
+    const fetch = respond(204);
+    const event = await emit('request.rejected', { decision: 'rejected', comment: 'Over budget' });
+    expect(await drainOnce(database.db, { webhook: webhook(fetch) })).toMatchObject({ delivered: 1 });
+
+    const headers = fetch.mock.calls[0]![1]!.headers as Record<string, string>;
+    expect(headers).toMatchObject({ 'webhook-id': event.id, 'webhook-timestamp': expect.stringMatching(/^\d+$/) });
+    expect(headers).not.toHaveProperty('webhook-signature');
   });
 
   it('retries a failed delivery later, with backoff, and rolls back its notifications meanwhile', async () => {

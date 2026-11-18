@@ -34,5 +34,9 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           # Optional: without this secret it is empty and the worker reports nothing to Sentry.
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          # Optional: the receiver of every event (e.g. the ERP) and the key the deliveries are signed with.
+          # Without the URL no webhook is called; without the secret the deliveries go out unsigned.
+          NOTIFY_WEBHOOK_URL: ${{ secrets.NOTIFY_WEBHOOK_URL }}
+          WEBHOOK_SIGNING_SECRET: ${{ secrets.WEBHOOK_SIGNING_SECRET }}
           # The Sentry environment of the worker's events (the API takes it from VERCEL_ENV).
           NODE_ENV: production

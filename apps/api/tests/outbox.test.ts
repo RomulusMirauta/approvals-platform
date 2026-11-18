@@ -58,6 +58,27 @@ describe('transactional outbox', () => {
     });
   });
 
+  it('gives a decision event everything the ERP needs to act on it', async () => {
+    const body = newRequest({ type: 'invoice_exception', source: 'erp-procurement-mcp', externalRef: 'INV-9002' });
+    const id = (await t.as('erp-agent', 'POST', '/v1/requests', body)).json().request.id;
+    const decided = (await t.as('bob', 'POST', `/v1/requests/${id}/decision`, { decision: 'approved' })).json();
+
+    const event = (await events())[1]!;
+    expect(event.type).toBe('request.approved');
+    expect(event.payload).toMatchObject({
+      requestId: id,
+      source: 'erp-procurement-mcp',
+      externalRef: 'INV-9002',
+      decision: 'approved',
+      // No comment is null, not an empty string.
+      comment: null,
+      decidedBy: t.users.bob.sub,
+      // The same instant the request records, from the database clock.
+      decidedAt: decided.decidedAt,
+    });
+    expect(Date.parse(event.payload.decidedAt!)).not.toBeNaN();
+  });
+
   it('records request.cancelled', async () => {
     const id = await raise();
     await t.as('alice', 'POST', `/v1/requests/${id}/cancel`);

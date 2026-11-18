@@ -5,6 +5,7 @@ import type { Db } from '@approvals/api/db/client';
 import { outboxEvents } from '@approvals/api/db/schema';
 import { deliver, type DeliveryOptions } from './deliver.js';
 import { logger as defaultLogger, type Logger } from './logger.js';
+import { webhookFromEnv, type WebhookOptions } from './webhook.js';
 
 // After this many failed attempts an event is dead-lettered: it stays in the table (processed_at null, with
 // its last_error) for a person to look at, but no worker picks it up again.
@@ -26,12 +27,15 @@ export interface DrainResult {
 // 10 s, 20 s, 40 s, ... capped at an hour: a receiver that is down gets time to recover instead of a flood.
 export const backoffSeconds = (attempts: number) => Math.min(10 * 2 ** (attempts - 1), 3_600);
 
-const webhookFromEnv = () => (process.env.NOTIFY_WEBHOOK_URL ? { url: process.env.NOTIFY_WEBHOOK_URL } : undefined);
+// Read once per process, so the "sent unsigned" warning is logged once, not on every drain. A malformed signing
+// secret throws here; the worker calls this when it starts.
+let envWebhook: { value: WebhookOptions | undefined } | undefined;
+export const defaultWebhook = () => (envWebhook ??= { value: webhookFromEnv(process.env, defaultLogger) }).value;
 
 // One batch in one transaction. A cron job or serverless function can call this too; the worker calls it in a loop.
 export async function drainOnce(
   db: Db,
-  { batchSize = 20, maxAttempts = MAX_ATTEMPTS, webhook = webhookFromEnv(), logger = defaultLogger }: DrainOptions = {},
+  { batchSize = 20, maxAttempts = MAX_ATTEMPTS, webhook = defaultWebhook(), logger = defaultLogger }: DrainOptions = {},
 ): Promise<DrainResult> {
   return db.transaction(async (tx) => {
     // FOR UPDATE locks the claimed rows until this transaction ends. SKIP LOCKED makes other workers pass over

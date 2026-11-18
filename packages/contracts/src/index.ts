@@ -198,6 +198,8 @@ export const Problem = z.object({
   status: z.number().int(),
   detail: z.string().optional(),
   errors: z.array(z.object({ path: z.string(), message: z.string() })).optional(),
+  // The same id as the X-Request-Id response header: quoting it finds the request's log lines and Sentry event.
+  requestId: z.string().optional(),
 });
 
 export type Role = z.infer<typeof Role>;

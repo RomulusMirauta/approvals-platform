@@ -16,7 +16,9 @@
   "dependencies": {
     "@approvals/api": "^0.2.0",
     "@approvals/contracts": "^0.2.0",
-    "drizzle-orm": "^0.45.4"
+    "@sentry/node": "^11.14.0",
+    "drizzle-orm": "^0.45.4",
+    "pino": "^10.4.0"
   },
   "devDependencies": {
     "tsx": "^4.23.15"

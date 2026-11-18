@@ -8,13 +8,16 @@ import { outboxEvents } from '../db/schema.js';
 
 type RequestFields = Omit<RequestEvent, 'actor' | 'decision' | 'comment'>;
 
+// httpRequestId: the X-Request-Id of the API call behind the event (undefined outside one, e.g. the seed), so the
+// worker can log it and pass it on. Not optional, so a new caller can't forget it by accident.
 export async function recordEvent(
   tx: Db,
   type: EventType,
   request: RequestFields,
   actor: TokenPayload,
+  httpRequestId: string | undefined,
   extra: Pick<RequestEvent, 'decision' | 'comment'> = {},
 ) {
   const payload: RequestEvent = { ...request, ...extra, actor: { id: actor.sub, name: actor.name } };
-  await tx.insert(outboxEvents).values({ type, payload });
+  await tx.insert(outboxEvents).values({ type, payload, httpRequestId });
 }

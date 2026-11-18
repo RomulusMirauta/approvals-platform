@@ -81,10 +81,23 @@ describe('transactional outbox', () => {
     const fields = { requestId: id, requesterId: t.users.alice.sub, title: 'x', type: 'other', priority: 'low', source: 'manual', externalRef: null } as const;
     await expect(
       t.db.transaction(async (tx) => {
-        await recordEvent(tx, 'request.cancelled', fields, t.users.alice);
+        await recordEvent(tx, 'request.cancelled', fields, t.users.alice, undefined);
         throw new Error('the state change failed');
       }),
     ).rejects.toThrow('the state change failed');
     expect(await events()).toHaveLength(0);
+  });
+});
+
+describe('request ids on outbox events', () => {
+  it('stores the X-Request-Id of the call that caused each event, for the worker to log and pass on', async () => {
+    const created = await t.as('alice', 'POST', '/v1/requests', newRequest(), { 'x-request-id': 'agent-run-42' });
+    const id = created.json().request.id;
+    const decided = await t.as('bob', 'POST', `/v1/requests/${id}/decision`, { decision: 'approved' });
+
+    const [createdEvent, approvedEvent] = await events();
+    expect(createdEvent!.httpRequestId).toBe('agent-run-42');
+    // Without a header the API makes one up, and the event gets that one.
+    expect(approvedEvent!.httpRequestId).toBe(decided.headers['x-request-id']);
   });
 });

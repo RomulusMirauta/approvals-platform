@@ -60,6 +60,7 @@ describe('error responses', () => {
       title: 'Service Unavailable',
       status: 503,
       detail: 'The service is temporarily unavailable; try again in a moment',
+      requestId: expect.any(String),
     });
     await app.close();
   });

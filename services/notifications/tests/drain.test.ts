@@ -1,8 +1,13 @@
+import * as Sentry from '@sentry/node';
+import type { ErrorEvent } from '@sentry/node';
+import { pino } from 'pino';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eq, sql } from 'drizzle-orm';
 import type { EventType, RequestEvent } from '@approvals/contracts';
 import { openDatabase, type Database } from '@approvals/api/db/client';
 import { notifications, outboxEvents, requests, users as usersTable } from '@approvals/api/db/schema';
+import { REDACT_CENSOR, REDACT_PATHS } from '@approvals/api/redact';
+import { initSentry } from '@approvals/api/sentry';
 import { backoffSeconds, drainOnce, MAX_ATTEMPTS } from '../src/drain.js';
 
 let database: Database;
@@ -39,7 +44,7 @@ beforeEach(async () => {
 });
 
 // Puts an event about Alice's request on the queue, as the API would.
-async function emit(type: EventType, overrides: Partial<RequestEvent> = {}) {
+async function emit(type: EventType, overrides: Partial<RequestEvent> = {}, httpRequestId: string | null = null) {
   const payload: RequestEvent = {
     requestId: request.id,
     requesterId: users.alice.sub,
@@ -51,7 +56,7 @@ async function emit(type: EventType, overrides: Partial<RequestEvent> = {}) {
     actor: { id: users.bob.sub, name: users.bob.name },
     ...overrides,
   };
-  const [row] = await database.db.insert(outboxEvents).values({ type, payload }).returning();
+  const [row] = await database.db.insert(outboxEvents).values({ type, payload, httpRequestId }).returning();
   return row!;
 }
 
@@ -176,5 +181,57 @@ describe('backoffSeconds', () => {
   it('doubles each attempt and caps at an hour', () => {
     expect([1, 2, 3, 4].map(backoffSeconds)).toEqual([10, 20, 40, 80]);
     expect(backoffSeconds(20)).toBe(3_600);
+  });
+});
+
+describe('request ids', () => {
+  // A pino logger that writes into an array, to read back what the worker logged.
+  function capture() {
+    const lines: Record<string, unknown>[] = [];
+    const logger = pino({ redact: { paths: REDACT_PATHS, censor: REDACT_CENSOR } }, { write: (line: string) => lines.push(JSON.parse(line)) });
+    return { lines, logger };
+  }
+
+  it('logs the request id of the API call behind each event and sends it to the webhook', async () => {
+    const fetch = respond(204);
+    const { lines, logger } = capture();
+    const event = await emit('request.approved', { decision: 'approved' }, 'trace-approve-1');
+    await drainOnce(database.db, { webhook: webhook(fetch), logger });
+
+    expect(fetch.mock.calls[0]![1]?.headers).toMatchObject({ 'x-request-id': 'trace-approve-1' });
+    expect(lines).toContainEqual(
+      expect.objectContaining({ msg: 'Event delivered', requestId: 'trace-approve-1', eventId: event.id, eventType: 'request.approved' }),
+    );
+  });
+
+  it('sends no X-Request-Id for an event no API call caused', async () => {
+    const fetch = respond(204);
+    await emit('request.cancelled');
+    await drainOnce(database.db, { webhook: webhook(fetch), logger: capture().logger });
+    expect(fetch.mock.calls[0]![1]?.headers).not.toHaveProperty('x-request-id');
+  });
+
+  it('logs a failure as a warning and a dead-lettered event as an error, and reports the latter to Sentry', async () => {
+    const reported: ErrorEvent[] = [];
+    initSentry({ SENTRY_DSN: 'https://public@sentry.example.invalid/1' }, {
+      beforeSend: (event) => {
+        reported.push(event);
+        return null;
+      },
+    });
+    const { lines, logger } = capture();
+    await emit('request.approved', { decision: 'approved' }, 'trace-dead-1');
+    const failing = webhook(respond(500));
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      await makeDue();
+      await drainOnce(database.db, { webhook: failing, logger });
+    }
+    await Sentry.flush(1_000);
+    await Sentry.close();
+
+    const levels = lines.map((line) => [line.msg, line.level]);
+    expect(levels).toEqual([...Array(MAX_ATTEMPTS - 1).fill(['Event delivery failed, will retry', 40]), ['Event dead-lettered', 50]]);
+    expect(reported).toHaveLength(1);
+    expect(reported[0]!.tags).toMatchObject({ requestId: 'trace-dead-1', eventType: 'request.approved' });
   });
 });

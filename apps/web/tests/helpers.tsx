@@ -50,7 +50,7 @@ export function pageOf(items: RequestDetail[]): RequestPage {
   return { items, page: 1, pageSize: 20, total: items.length };
 }
 
-type Handler = (body: unknown, url: URL) => { status?: number; body: unknown };
+type Handler = (body: unknown, url: URL) => { status?: number; body: unknown; headers?: Record<string, string> };
 
 // A tiny fake API: routes are "METHOD /path" and the handler returns the response.
 // Every call is recorded so tests can assert on what the dashboard sent.
@@ -67,14 +67,14 @@ export function mockApi(routes: Record<string, Handler>) {
     const response = handler(body, url);
     const status = response.status ?? 200;
     const contentType = status >= 400 ? 'application/problem+json' : 'application/json';
-    return new Response(JSON.stringify(response.body), { status, headers: { 'Content-Type': contentType } });
+    return new Response(JSON.stringify(response.body), { status, headers: { 'Content-Type': contentType, ...response.headers } });
   });
   vi.stubGlobal('fetch', fetchMock);
   return calls;
 }
 
-export function renderApp() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+// Retries are off by default so a failing call shows its error at once; the retry tests pass the real client.
+export function renderApp(queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   return render(
     <QueryClientProvider client={queryClient}>
       <App />

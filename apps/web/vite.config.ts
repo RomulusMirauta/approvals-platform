@@ -11,6 +11,7 @@ export default defineConfig({
     proxy: {
       '/v1': apiUrl,
       '/health': apiUrl,
+      '/ready': apiUrl,
     },
   },
   test: {

@@ -46,15 +46,26 @@ export class ApiError extends Error {
   readonly title: string;
   readonly detail?: string;
   readonly fieldErrors: FieldError[];
+  // From the Retry-After header of a 503 or 429: how long the server asks us to wait.
+  readonly retryAfterSeconds?: number;
 
-  constructor(problem: Problem) {
+  constructor(problem: Problem, retryAfterSeconds?: number) {
     super(problem.detail ?? problem.title);
     this.name = 'ApiError';
     this.status = problem.status;
     this.title = problem.title;
     this.detail = problem.detail;
     this.fieldErrors = problem.errors ?? [];
+    this.retryAfterSeconds = retryAfterSeconds;
   }
+}
+
+// Retry-After is either a number of seconds or an HTTP date. The API sends seconds; a date is ignored and
+// the normal backoff applies, which is good enough.
+function retryAfter(response: Response): number | undefined {
+  const value = response.headers.get('Retry-After');
+  if (value === null || !/^\d+$/.test(value.trim())) return undefined;
+  return Number(value);
 }
 
 // Where the API lives. Empty by default, so paths stay relative (/v1/...) and the Vite dev server proxies
@@ -81,7 +92,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     setToken(null);
     onUnauthorized();
   }
-  throw new ApiError(await readProblem(response));
+  throw new ApiError(await readProblem(response), retryAfter(response));
 }
 
 // Errors are RFC 9457 problem details, but a proxy or a crash can still return something else.

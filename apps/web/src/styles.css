@@ -177,6 +177,17 @@ label {
   padding-left: 1.2rem;
 }
 
+/* Shown above everything while queries retry: informative, not alarming, so warning colours, not danger. */
+.banner {
+  margin: 0;
+  padding: 0.5rem 1rem;
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--warning);
+  background: var(--warning-bg);
+  border-bottom: 1px solid var(--border);
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;

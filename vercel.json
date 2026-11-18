@@ -1,0 +1,18 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "npm ci",
+  "buildCommand": "npm run build:contracts && npm run build -w @approvals/api && npm run seed -w @approvals/api && npm run build -w @approvals/web",
+  "outputDirectory": "apps/web/dist",
+  "regions": ["fra1"],
+  "functions": {
+    "api/index.js": { "maxDuration": 10 }
+  },
+  "rewrites": [
+    { "source": "/v1/:path*", "destination": "/api" },
+    { "source": "/docs", "destination": "/api" },
+    { "source": "/docs/:path*", "destination": "/api" },
+    { "source": "/health", "destination": "/api" },
+    { "source": "/((?!api/|assets/).*)", "destination": "/index.html" }
+  ]
+}

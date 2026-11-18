@@ -26,11 +26,12 @@ const migrationsFolder = fileURLToPath(new URL('../../drizzle', import.meta.url)
 export const LOCAL_DATA_DIR = fileURLToPath(new URL('../../.data/pglite', import.meta.url));
 
 // url: a postgres:// connection string, a folder for PGlite to keep its data in, or nothing for in-memory.
-export async function openDatabase(url?: string): Promise<Database> {
+// migrate: false on serverless, where the deploy pipeline has already applied migrations.
+export async function openDatabase(url?: string, { migrate = true } = {}): Promise<Database> {
   if (url?.startsWith('postgres://') || url?.startsWith('postgresql://')) {
     const pool = new pg.Pool({ connectionString: url });
     const db = drizzlePg(pool, { schema });
-    await migratePg(db, { migrationsFolder });
+    if (migrate) await migratePg(db, { migrationsFolder });
     return { db, close: () => pool.end() };
   }
   // PGlite creates only the last folder of a data path itself (memory:// and idb:// aren't paths).

@@ -1,0 +1,34 @@
+{
+  "name": "approvals-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Human-in-the-loop approvals for AI agents: a versioned REST API with OpenAPI docs and a React dashboard for approving requests and working the exception queue.",
+  "author": "Romulus Mirăuță (https://github.com/RomulusMirauta)",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "workspaces": [
+    "packages/contracts",
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "build:contracts": "npm run build -w @approvals/contracts",
+    "typecheck": "npm run build:contracts && npm run typecheck --workspaces --if-present",
+    "test": "npm run build:contracts && npm run test --workspaces --if-present",
+    "lint": "eslint .",
+    "dev:api": "npm run dev -w @approvals/api",
+    "dev:web": "npm run dev -w @approvals/web"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.20.5",
+    "eslint": "^10.15.0",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.73.0",
+    "vitest": "^5.1.1"
+  }
+}

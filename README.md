@@ -64,6 +64,7 @@ One Vercel project serves both parts from the same domain: the dashboard as stat
    - `DATABASE_URL`: the Neon connection string
    - `JWT_SECRET`: 32+ random characters, e.g. `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
 3. Deploy. The build applies the migrations and adds the demo data if it isn't there yet. Requests never run migrations.
+4. Optional: set `CRON_SECRET` (32+ random characters) and Vercel Cron resets the demo data every night at 03:00 UTC, so visitors always find a full queue.
 
 ## Roadmap
 

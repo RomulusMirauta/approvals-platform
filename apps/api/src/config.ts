@@ -16,3 +16,11 @@ export function jwtSecret({ allowDevSecret = false } = {}): string {
   }
   return secret;
 }
+
+// Optional: without it the demo-reset route doesn't exist. A short one would let anyone guess it and wipe the demo.
+export function cronSecret(): string | undefined {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) return undefined;
+  if (secret.length < MIN_SECRET_LENGTH) throw new Error(`CRON_SECRET must be at least ${MIN_SECRET_LENGTH} random characters`);
+  return secret;
+}

@@ -8,11 +8,13 @@
   "functions": {
     "api/index.js": { "maxDuration": 10 }
   },
+  "crons": [{ "path": "/internal/reset-demo", "schedule": "0 3 * * *" }],
   "rewrites": [
     { "source": "/v1/:path*", "destination": "/api" },
     { "source": "/docs", "destination": "/api" },
     { "source": "/docs/:path*", "destination": "/api" },
     { "source": "/health", "destination": "/api" },
+    { "source": "/internal/:path*", "destination": "/api" },
     { "source": "/((?!api/|assets/).*)", "destination": "/index.html" }
   ]
 }

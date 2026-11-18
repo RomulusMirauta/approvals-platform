@@ -11,6 +11,7 @@ import type { Db } from './db/client.js';
 import { registerDocs } from './docs.js';
 import { registerErrorHandlers } from './errors.js';
 import { authRoutes } from './routes/auth.js';
+import { internalRoutes } from './routes/internal.js';
 import { reportRoutes } from './routes/reports.js';
 import { requestRoutes } from './routes/requests.js';
 
@@ -24,9 +25,11 @@ export interface AppOptions {
   // Behind a proxy (Vercel, a load balancer) every request comes from the proxy's IP. Trusting it makes
   // request.ip the real client, so the rate limits apply per client instead of to everyone at once.
   trustProxy?: boolean;
+  // Set only on the public demo: adds GET /internal/reset-demo for the nightly cron.
+  cronSecret?: string;
 }
 
-export async function buildApp({ db, jwtSecret, logger = false, corsOrigin, rateLimit: limit = true, trustProxy = false }: AppOptions) {
+export async function buildApp({ db, jwtSecret, logger = false, corsOrigin, rateLimit: limit = true, trustProxy = false, cronSecret }: AppOptions) {
   const app = Fastify({ logger, trustProxy }).withTypeProvider<ZodTypeProvider>();
 
   // The zod schemas from @approvals/contracts validate input, serialize output (dropping unknown fields)
@@ -87,6 +90,9 @@ export async function buildApp({ db, jwtSecret, logger = false, corsOrigin, rate
     },
     { prefix: '/v1' },
   );
+
+  // Outside /v1: an operations job, not part of the public API.
+  if (cronSecret) await app.register(internalRoutes, { db, cronSecret, prefix: '/internal' });
 
   return app;
 }

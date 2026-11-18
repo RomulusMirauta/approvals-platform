@@ -6,10 +6,11 @@ import jwt from '@fastify/jwt';
 import rateLimit from '@fastify/rate-limit';
 import swagger from '@fastify/swagger';
 import { jsonSchemaTransform, serializerCompiler, validatorCompiler, type ZodTypeProvider } from 'fastify-type-provider-zod';
+import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from './db/client.js';
 import { registerDocs } from './docs.js';
-import { registerErrorHandlers } from './errors.js';
+import { problems, registerErrorHandlers, serviceUnavailable } from './errors.js';
 import { authRoutes } from './routes/auth.js';
 import { internalRoutes } from './routes/internal.js';
 import { notificationRoutes } from './routes/notifications.js';
@@ -28,6 +29,17 @@ export interface AppOptions {
   trustProxy?: boolean;
   // Set only on the public demo: adds GET /internal/reset-demo for the nightly cron.
   cronSecret?: string;
+}
+
+// A readiness probe must answer quickly either way: a database that takes longer than this is not ready.
+const READY_TIMEOUT_MS = 2_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Timed out after ${ms} ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 export async function buildApp({ db, jwtSecret, logger = false, corsOrigin, rateLimit: limit = true, trustProxy = false, cronSecret }: AppOptions) {
@@ -49,7 +61,8 @@ export async function buildApp({ db, jwtSecret, logger = false, corsOrigin, rate
 
   // Default security headers, including a strict CSP. Only /docs relaxes it (see docs.ts).
   await app.register(helmet);
-  await app.register(cors, { origin: corsOrigin ?? process.env.CORS_ORIGIN ?? 'http://localhost:5173' });
+  // Retry-After is not readable cross-origin unless exposed; the dashboard uses it to time its retries.
+  await app.register(cors, { origin: corsOrigin ?? process.env.CORS_ORIGIN ?? 'http://localhost:5173', exposedHeaders: ['Retry-After'] });
   if (limit) await app.register(rateLimit, { max: 300, timeWindow: '1 minute' });
   // Pinning the algorithm means a token can't pick a weaker one (or none) for itself.
   await app.register(jwt, { secret: jwtSecret, sign: { algorithm: 'HS256' }, verify: { algorithms: ['HS256'] } });
@@ -67,7 +80,7 @@ export async function buildApp({ db, jwtSecret, logger = false, corsOrigin, rate
         { name: 'requests', description: 'Approval requests, decisions and comments' },
         { name: 'reports', description: 'Tags and counters for the dashboard' },
         { name: 'notifications', description: 'Notifications delivered by the notification service' },
-        { name: 'health', description: 'Liveness check' },
+        { name: 'health', description: 'Liveness (/health) and readiness (/ready) checks' },
       ],
       components: { securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' } } },
       // Every route needs a token unless it says security: [].
@@ -77,10 +90,34 @@ export async function buildApp({ db, jwtSecret, logger = false, corsOrigin, rate
   });
   registerDocs(app);
 
+  // Liveness: the process is up and answering. It never touches the database, so a database outage doesn't
+  // make a platform restart healthy API instances, which would not fix the database.
   app.get(
     '/health',
     { schema: { tags: ['health'], security: [], response: { 200: z.object({ status: z.literal('ok') }) } } },
     async () => ({ status: 'ok' as const }),
+  );
+
+  // Readiness: this instance can serve real requests, database included. A load balancer or uptime check uses it
+  // to stop sending traffic (or to alert) while the database is unreachable, then resumes once it answers.
+  app.get(
+    '/ready',
+    {
+      schema: {
+        tags: ['health'],
+        security: [],
+        response: { 200: z.object({ status: z.literal('ready') }), ...problems(503) },
+      },
+    },
+    async (request) => {
+      try {
+        await withTimeout(db.execute(sql`select 1`), READY_TIMEOUT_MS);
+      } catch (error) {
+        request.log.warn({ err: error }, 'Readiness check failed');
+        throw serviceUnavailable('The database is not reachable');
+      }
+      return { status: 'ready' as const };
+    },
   );
 
   // Version prefix: a breaking change would ship as /v2 next to /v1.

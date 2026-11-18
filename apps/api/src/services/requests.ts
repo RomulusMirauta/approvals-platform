@@ -15,6 +15,7 @@ import type {
 } from '@approvals/contracts';
 import { seesAllRequests, type TokenPayload } from '../auth.js';
 import type { Db } from '../db/client.js';
+import { inTransaction } from '../db/retry.js';
 import { approvals, comments, requests, requestTags, tags } from '../db/schema.js';
 import { conflict, forbidden, notFound } from '../errors.js';
 import { recordEvent } from './outbox.js';
@@ -147,7 +148,7 @@ const raceLost = (): never => {
 };
 
 async function tryCreate(db: Db, viewer: TokenPayload, body: CreateInput): Promise<CreateRequestResponse | undefined> {
-  return db.transaction(async (tx) => {
+  return inTransaction(db, async (tx) => {
     // The partial unique index allows one pending request per (source, externalRef). Under a race the second
     // insert waits for the first transaction, then does nothing, so a retrying agent never gets a duplicate.
     const [inserted] = await tx
@@ -241,7 +242,7 @@ async function lockRequest(tx: Db, viewer: TokenPayload, id: string) {
 }
 
 export async function decideRequest(db: Db, viewer: TokenPayload, id: string, body: DecisionInput) {
-  await db.transaction(async (tx) => {
+  await inTransaction(db, async (tx) => {
     const row = await lockRequest(tx, viewer, id);
     // Separation of duties: nobody approves their own request.
     if (row.requesterId === viewer.sub) throw forbidden('You cannot decide on a request you raised');
@@ -256,7 +257,7 @@ export async function decideRequest(db: Db, viewer: TokenPayload, id: string, bo
 }
 
 export async function cancelRequest(db: Db, viewer: TokenPayload, id: string) {
-  await db.transaction(async (tx) => {
+  await inTransaction(db, async (tx) => {
     const row = await lockRequest(tx, viewer, id);
     if (row.requesterId !== viewer.sub && viewer.role !== 'admin') {
       throw forbidden('Only the requester or an admin can cancel a request');

@@ -13,11 +13,25 @@ const database = await openDatabase(databaseUrl);
 const trustProxy = process.env.TRUST_PROXY === 'true';
 const app = await buildApp({ db: database.db, jwtSecret: secret, logger: true, corsOrigin: process.env.CORS_ORIGIN, trustProxy });
 
+// A request stuck on a dead connection (or a pool that never drains) would otherwise keep the process alive
+// until the platform kills it without logs. 10 s is well inside the usual 30 s grace period after SIGTERM.
+const SHUTDOWN_TIMEOUT_MS = 10_000;
+
 // Stop taking new connections, let in-flight requests finish, then close the database.
 async function shutdown(signal: string) {
   app.log.info(`${signal} received, shutting down`);
-  await app.close();
-  await database.close();
+  // unref: the timer alone must not keep the process running once everything has closed.
+  setTimeout(() => {
+    app.log.error(`Shutdown took longer than ${SHUTDOWN_TIMEOUT_MS} ms, exiting anyway`);
+    process.exit(1);
+  }, SHUTDOWN_TIMEOUT_MS).unref();
+  try {
+    await app.close();
+    await database.close();
+  } catch (error) {
+    app.log.error(error, 'Shutdown failed');
+    process.exit(1);
+  }
   process.exit(0);
 }
 process.once('SIGINT', shutdown);

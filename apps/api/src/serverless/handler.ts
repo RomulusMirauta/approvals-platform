@@ -3,7 +3,7 @@
 // not here, so a cold start only opens a connection pool.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { buildApp } from '../app.js';
-import { jwtSecret } from '../config.js';
+import { cronSecret, jwtSecret } from '../config.js';
 import { openDatabase } from '../db/client.js';
 
 let app: ReturnType<typeof start> | undefined;
@@ -13,7 +13,7 @@ async function start() {
   if (!url) throw new Error('DATABASE_URL must be set');
   const database = await openDatabase(url, { migrate: false });
   // Behind Vercel's proxy, the client IP comes from X-Forwarded-For; the dashboard is on the same origin.
-  const instance = await buildApp({ db: database.db, jwtSecret: jwtSecret(), logger: true, trustProxy: true });
+  const instance = await buildApp({ db: database.db, jwtSecret: jwtSecret(), logger: true, trustProxy: true, cronSecret: cronSecret() });
   await instance.ready();
   return instance;
 }

@@ -48,7 +48,7 @@ The rules live in the database as constraints: foreign keys with explicit `ON DE
 
 ## Events and notifications
 
-When a request is created, approved, rejected or cancelled, the API writes an event to the `outbox_events` table **in the same transaction** as the change (the transactional outbox). So the event exists if and only if the change committed: there is no window where the database says "approved" but the event was lost, or the other way round. A separate notification service, [`services/notifications`](services/notifications), consumes the table as a queue. It tells the requester about decisions on their request and tells approvers about new invoice exceptions and high-priority requests, and it can forward every event to a webhook (`NOTIFY_WEBHOOK_URL`).
+When a request is created, approved, rejected or cancelled, the API writes an event to the `outbox_events` table **in the same transaction** as the change (the transactional outbox). So the event exists if and only if the change committed: there is no window where the database says "approved" but the event was lost, or the other way round. A separate notification service, [`services/notifications`](services/notifications), consumes the table as a queue. It tells the requester about decisions on their request and tells approvers about new invoice exceptions and high-priority requests, and it can forward every event to a signed webhook (`NOTIFY_WEBHOOK_URL`, see [Signed webhooks](#signed-webhooks)).
 
 ```mermaid
 sequenceDiagram
@@ -74,6 +74,21 @@ sequenceDiagram
 - **Delivery is at-least-once**, so it is idempotent: a unique `(event_id, recipient_id)` makes a repeated event a no-op, and the webhook gets the event id as an idempotency key. A failed delivery is retried with exponential backoff (10 s, 20 s, 40 s, …); after 5 attempts the event is dead-lettered (left unprocessed with its `last_error`). An event that doesn't match the shared contract in `packages/contracts` fails the same way.
 - **Moving to a broker later:** keep the outbox and add a relay that publishes each row to SQS, RabbitMQ or BullMQ and marks it processed. The consumer stays the same `deliver` function; the broker replaces `SKIP LOCKED` (visibility timeout, acks), `available_at` (delayed retries) and the attempts limit (a dead-letter queue).
 - **How the service reaches the database:** `@approvals/api` exports its database client and schema (`@approvals/api/db/*`), so there is one schema and one migration history, owned by the API. Sharing a database couples the two services' schemas; it is the simple choice for a modular monolith, and the table is the only interface between them.
+
+### Signed webhooks
+
+With `NOTIFY_WEBHOOK_URL` set, the worker POSTs every event there as `{ id, type, createdAt, payload }`, signed the [Standard Webhooks](https://www.standardwebhooks.com) way so the receiver (e.g. the ERP) can trust it:
+
+| Header | Value |
+|---|---|
+| `webhook-id` | the event id, the same on every retry (also sent as `idempotency-key`) |
+| `webhook-timestamp` | unix seconds of this attempt |
+| `webhook-signature` | `v1,` + base64 HMAC-SHA256 of `${webhook-id}.${webhook-timestamp}.${raw body}`, keyed with the secret's decoded bytes |
+| `x-request-id` | the API call behind the event, when there was one |
+
+- **`WEBHOOK_SIGNING_SECRET`**: `whsec_` followed by at least 24 base64-encoded random bytes, shared with the receiver, e.g. `node -e "console.log('whsec_' + require('crypto').randomBytes(32).toString('base64'))"`. A malformed one stops the worker at startup. Without one, deliveries still go out unsigned and the worker logs a warning once.
+- **Verifying** on the receiver: use any Standard Webhooks library, or `verifyWebhook(secret, headers, rawBody)` from `@approvals/notifications`. Compute the HMAC over the raw body bytes (not re-serialized JSON), compare in constant time, refuse timestamps more than 5 minutes off, and drop repeats by `webhook-id`.
+- **Decision events** (`request.approved`, `request.rejected`) carry what the receiver needs to act without calling back: `requestId`, `source`, `externalRef`, `decision`, `comment` (null if none), `decidedBy` (the approver's user id; `actor` has their id and name) and `decidedAt` (ISO 8601, the request's decision time), besides `requesterId`, `title`, `type` and `priority`.
 
 Run the worker against the same Postgres as the API (PGlite runs inside a single process, so it can't be shared):
 
@@ -114,7 +129,7 @@ One Vercel project serves both parts from the same domain: the dashboard as stat
 
 ### Notification worker in production
 
-Vercel hosts request handlers only, so the live demo runs the notification service as a scheduled GitHub Actions job ([notifications.yml](.github/workflows/notifications.yml)): every 5 minutes it drains the outbox and exits (`npm run drain -w @approvals/notifications`). It needs a `DATABASE_URL` repository secret and the repository variable `WORKER_ENABLED=true`. On a VM or container platform it would run continuously with `npm run worker`.
+Vercel hosts request handlers only, so the live demo runs the notification service as a scheduled GitHub Actions job ([notifications.yml](.github/workflows/notifications.yml)): every 5 minutes it drains the outbox and exits (`npm run drain -w @approvals/notifications`). It needs a `DATABASE_URL` repository secret and the repository variable `WORKER_ENABLED=true`; the optional secrets `NOTIFY_WEBHOOK_URL` and `WEBHOOK_SIGNING_SECRET` turn on the signed webhook. On a VM or container platform it would run continuously with `npm run worker`.
 
 ### Environments
 

@@ -30,6 +30,9 @@ export const LOCAL_DATA_DIR = fileURLToPath(new URL('../../.data/pglite', import
 export async function openDatabase(url?: string, { migrate = true } = {}): Promise<Database> {
   if (url?.startsWith('postgres://') || url?.startsWith('postgresql://')) {
     const pool = new pg.Pool({ connectionString: url });
+    // A connection that dies while idle in the pool (database restart, network drop, an admin closing it)
+    // emits 'error' on the pool. Unhandled, that crashes the process; the pool replaces the connection itself.
+    pool.on('error', (error) => console.error('Idle database connection lost:', error.message));
     const db = drizzlePg(pool, { schema });
     if (migrate) await migratePg(db, { migrationsFolder });
     return { db, close: () => pool.end() };

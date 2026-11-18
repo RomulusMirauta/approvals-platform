@@ -39,3 +39,20 @@ Also: `metadata` is limited to 10 KB, and the dashboard can call an API on anoth
 | High | Every API request on Vercel failed with `FUNCTION_INVOCATION_FAILED`. The logs showed `ERR_REQUIRE_ESM`: `@fastify/swagger-ui` → `@fastify/static` `require()`s the ESM-only `content-disposition` 3. Node 26 allows that locally, so tests and local runs passed; Vercel's function loader does not. | Removed `@fastify/swagger-ui`. `/docs` is a small page that loads Swagger UI from a CDN, with a CSP relaxed only on that route. Verified on the live deployment. |
 
 Lesson: test the deployed artifact, not just the code. The serverless handler had been tested behind a local Node server, which used the local module loader.
+
+## 2026-11-18: database failures and resilience
+
+The `api-postgres` CI job (the API tests against a real Postgres 17 server) crashed the test process: the server closed a connection that sat idle in the pool, the pool emitted `'error'`, and nothing listened for it. PGlite has no network connections, so the local runs never showed it. On Neon, which drops idle connections and suspends the database, the same thing would kill a running server. That prompted a look at every way the database can be briefly unavailable.
+
+| Severity | Finding | Fix |
+|---|---|---|
+| High | An idle pool connection closed by the server crashed the process (unhandled `'error'` event). | The pool has an `'error'` listener that logs; the pool replaces the connection itself. |
+| Medium | The pool waited forever for a connection and a query, so an unreachable database held a function until Vercel killed it at 10 s, with a generic platform error. | Connect timeout 3 s, query timeout 5 s, max 5 connections, idle timeout 10 s, TCP keepalive. |
+| Medium | A dropped connection, a database waking up or a deadlock answered 500 "Something went wrong", which clients treat as a bug and don't retry. | Transient failures answer 503 problem+json with `Retry-After` and are logged as warnings. |
+| Medium | The serverless handler cached the promise of its first start. If that start failed, every later request on the instance got the same rejected promise until the instance was recycled. | A failed start is forgotten so the next request tries again; a transient one answers 503. The first connection on a cold start is retried once. |
+| Low | Deadlocks and serialization failures, which Postgres says to fix by re-running the transaction, reached the user as errors. | Those transactions are retried once after a short random delay. Other writes are not retried. |
+| Low | Nothing told a load balancer or uptime check whether the API could reach its database: `/health` doesn't touch it, by design. | `GET /ready` checks the database with a 2 s timeout. |
+| Low | A hung close could keep a stopping server alive indefinitely. | Shutdown exits after 10 s regardless. |
+| Low | The dashboard showed a raw error while the API was briefly unavailable. | Queries retry network errors and 5xx with backoff (honouring `Retry-After`), never 4xx, under a "retrying" banner; mutations are not retried. |
+
+Not done: a server-side `statement_timeout`. Neon's pooled endpoint rejects it as a startup parameter, so it would have to be set on the database role (see README, Resilience).

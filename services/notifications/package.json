@@ -9,6 +9,7 @@
   },
   "scripts": {
     "worker": "tsx src/worker.ts",
+    "drain": "tsx src/worker.ts --once",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

@@ -107,6 +107,10 @@ One Vercel project serves both parts from the same domain: the dashboard as stat
 3. Deploy. The build applies the migrations and adds the demo data if it isn't there yet. Requests never run migrations.
 4. Optional: set `CRON_SECRET` (32+ random characters) and Vercel Cron resets the demo data every night at 03:00 UTC, so visitors always find a full queue.
 
+### Notification worker in production
+
+Vercel hosts request handlers only, so the live demo runs the notification service as a scheduled GitHub Actions job ([notifications.yml](.github/workflows/notifications.yml)): every 5 minutes it drains the outbox and exits (`npm run drain -w @approvals/notifications`). It needs a `DATABASE_URL` repository secret and the repository variable `WORKER_ENABLED=true`. On a VM or container platform it would run continuously with `npm run worker`.
+
 ## Roadmap
 
 - [x] Monorepo, shared contract, database schema and migrations

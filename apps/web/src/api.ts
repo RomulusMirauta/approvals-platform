@@ -5,6 +5,8 @@ import type {
   DecisionBody,
   ListRequestsQuery,
   LoginResponse,
+  Notification,
+  NotificationList,
   Problem,
   RequestDetail,
   RequestPage,
@@ -113,4 +115,6 @@ export const api = {
   addComment: (id: string, body: string) => request<Comment>('POST', `/v1/requests/${id}/comments`, { body }),
   tags: () => request<Tag[]>('GET', '/v1/tags'),
   stats: () => request<Stats>('GET', '/v1/stats'),
+  notifications: () => request<NotificationList>('GET', '/v1/notifications'),
+  markRead: (id: string) => request<Notification>('POST', `/v1/notifications/${id}/read`),
 };

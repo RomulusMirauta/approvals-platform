@@ -1,4 +1,4 @@
-import { cleanup, screen, within, waitFor } from '@testing-library/react';
+import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setToken } from '../src/api';
@@ -19,6 +19,7 @@ function signedInAsApprover(extraRoutes: Parameters<typeof mockApi>[0] = {}) {
     'GET /v1/stats': () => ({ body: stats }),
     'GET /v1/tags': () => ({ body: [] }),
     'GET /v1/requests': () => ({ body: pageOf([request]) }),
+    'GET /v1/notifications': () => ({ body: { items: [], unread: 0 } }),
     [`GET /v1/requests/${request.id}`]: () => ({ body: request }),
     [`POST /v1/requests/${request.id}/decision`]: (body: any) => {
       const decision = { id: crypto.randomUUID(), approver: bob, createdAt: new Date().toISOString(), ...body };
@@ -98,6 +99,29 @@ describe('dashboard', () => {
     expect(within(panel).queryByRole('button', { name: 'Approve' })).toBeNull();
     const listCallsAfter = calls.filter((call) => call.url.pathname === '/v1/requests').length;
     expect(listCallsAfter).toBeGreaterThan(listCallsBefore);
+  });
+
+  it('shows unread notifications and opens the request of the one you choose', async () => {
+    const notification = {
+      id: '20000000-0000-4000-8000-000000000001',
+      event: 'request.created',
+      requestId: makeRequest().id,
+      message: 'New invoice exception: "INV-1003"',
+      read: false,
+      createdAt: new Date().toISOString(),
+    };
+    const { calls } = signedInAsApprover({
+      'GET /v1/notifications': () => ({ body: { items: [notification], unread: 1 } }),
+      [`POST /v1/notifications/${notification.id}/read`]: () => ({ body: { ...notification, read: true } }),
+    });
+    renderApp();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Notifications, 1 unread' }));
+    const list = screen.getByRole('region', { name: 'Notifications' });
+    await userEvent.click(within(list).getByRole('button', { name: /New invoice exception/ }));
+
+    expect(await screen.findByRole('complementary', { name: 'Request details' })).toBeTruthy();
+    expect(calls.some((call) => call.method === 'POST' && call.url.pathname.endsWith('/read'))).toBe(true);
   });
 
   it('shows problem details from the API', async () => {

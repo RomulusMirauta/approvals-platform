@@ -12,6 +12,7 @@ import { registerDocs } from './docs.js';
 import { registerErrorHandlers } from './errors.js';
 import { authRoutes } from './routes/auth.js';
 import { internalRoutes } from './routes/internal.js';
+import { notificationRoutes } from './routes/notifications.js';
 import { reportRoutes } from './routes/reports.js';
 import { requestRoutes } from './routes/requests.js';
 
@@ -65,6 +66,7 @@ export async function buildApp({ db, jwtSecret, logger = false, corsOrigin, rate
         { name: 'auth', description: 'Sign in and the current user' },
         { name: 'requests', description: 'Approval requests, decisions and comments' },
         { name: 'reports', description: 'Tags and counters for the dashboard' },
+        { name: 'notifications', description: 'Notifications delivered by the notification service' },
         { name: 'health', description: 'Liveness check' },
       ],
       components: { securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' } } },
@@ -87,6 +89,7 @@ export async function buildApp({ db, jwtSecret, logger = false, corsOrigin, rate
       await v1.register(authRoutes, { db });
       await v1.register(requestRoutes, { db });
       await v1.register(reportRoutes, { db });
+      await v1.register(notificationRoutes, { db });
     },
     { prefix: '/v1' },
   );

@@ -8,12 +8,14 @@ export const REQUEST_TYPES = ['invoice_exception', 'purchase', 'access', 'other'
 export const REQUEST_STATUSES = ['pending', 'approved', 'rejected', 'cancelled'] as const;
 export const PRIORITIES = ['low', 'normal', 'high'] as const;
 export const DECISIONS = ['approved', 'rejected'] as const;
+export const EVENT_TYPES = ['request.created', 'request.approved', 'request.rejected', 'request.cancelled'] as const;
 
 export const Role = z.enum(ROLES);
 export const RequestType = z.enum(REQUEST_TYPES);
 export const RequestStatus = z.enum(REQUEST_STATUSES);
 export const Priority = z.enum(PRIORITIES);
 export const DecisionValue = z.enum(DECISIONS);
+export const EventType = z.enum(EVENT_TYPES);
 
 const id = z.uuid();
 const timestamp = z.iso.datetime({ offset: true });
@@ -158,6 +160,37 @@ export const Stats = z.object({
   pendingHighPriority: z.number().int(),
 });
 
+// --- Events and notifications ---
+
+// What the API writes to the outbox and the notification service reads. Services that talk through a queue
+// still share a contract; it lives here so both sides change together.
+export const RequestEvent = z.object({
+  requestId: id,
+  requesterId: id,
+  title: z.string(),
+  type: RequestType,
+  priority: Priority,
+  source: z.string(),
+  externalRef: z.string().nullable(),
+  decision: DecisionValue.optional(),
+  comment: z.string().optional(),
+  actor: UserRef.describe('Who caused the event'),
+});
+
+export const Notification = z.object({
+  id,
+  event: EventType,
+  requestId: id,
+  message: z.string(),
+  read: z.boolean(),
+  createdAt: timestamp,
+});
+
+export const NotificationList = z.object({
+  items: z.array(Notification).describe('Newest first, at most 50'),
+  unread: z.number().int(),
+});
+
 // Error body for every 4xx/5xx response (RFC 9457 problem details).
 export const Problem = z.object({
   type: z.string(),
@@ -189,4 +222,8 @@ export type DecisionBody = z.input<typeof DecisionBody>;
 export type CommentBody = z.infer<typeof CommentBody>;
 export type Tag = z.infer<typeof Tag>;
 export type Stats = z.infer<typeof Stats>;
+export type EventType = z.infer<typeof EventType>;
+export type RequestEvent = z.infer<typeof RequestEvent>;
+export type Notification = z.infer<typeof Notification>;
+export type NotificationList = z.infer<typeof NotificationList>;
 export type Problem = z.infer<typeof Problem>;

@@ -15,6 +15,13 @@
       "when": 1795003441093,
       "tag": "0001_amount_bigint",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795007273415,
+      "tag": "0002_outbox",
+      "breakpoints": true
     }
   ]
 }

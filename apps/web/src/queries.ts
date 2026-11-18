@@ -72,3 +72,16 @@ export function useAddComment(id: string) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['request', id] }),
   });
 }
+
+// Notifications arrive in the background (the notification service delivers them from the outbox), so the
+// list is polled. Every 30 seconds is plenty for approvals; push (SSE, WebSockets) would be the next step.
+export const useNotifications = () =>
+  useQuery({ queryKey: ['notifications'], queryFn: api.notifications, refetchInterval: 30_000 });
+
+export function useMarkRead() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.markRead(id),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+  });
+}

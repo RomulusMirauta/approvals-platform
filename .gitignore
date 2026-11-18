@@ -7,3 +7,7 @@ coverage/
 playwright-report/
 test-results/
 .donotpush/
+
+# Vercel CLI link and pulled environment files
+.vercel
+.env*.local

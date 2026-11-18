@@ -46,7 +46,8 @@ describe('OpenAPI', () => {
   it('serves the docs page with a CSP relaxed only for Swagger UI', async () => {
     const page = await t.app.inject({ method: 'GET', url: '/docs' });
     expect(page.statusCode).toBe(200);
-    expect(page.body).toContain('/docs/json');
+    expect(page.body).toContain('/docs/init.js');
+    expect((await t.app.inject({ method: 'GET', url: '/docs/init.js' })).body).toContain("url: '/docs/json'");
     expect(page.headers['content-security-policy']).toContain('cdn.jsdelivr.net');
 
     const api = await t.app.inject({ method: 'GET', url: '/health' });
